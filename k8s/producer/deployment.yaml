@@ -29,7 +29,7 @@ spec:
         app: producer
     spec:
       containers:
-      - image: ratnadeepb/lossycount:latest
+      - image: ratnadeepb/slops-producer:latest
         name: producer
         ports:
         - containerPort: 62000
