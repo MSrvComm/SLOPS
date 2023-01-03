@@ -28,3 +28,21 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 kubectl create namespace observability
 kubectl create -f https://github.com/jaegertracing/jaeger-operator/releases/download/v1.40.0/jaeger-operator.yaml -n observability
 ```
+
+## Kafka Commands
+
+```bash
+kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluster.local:2181 --list
+```
+
+```bash
+kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluster.local:2181 --describe --topic OrderGo
+```
+
+```bash
+kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluster.local:2181 --delete --topic OrderGo
+```
+
+```bash
+kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluster.local:2181 --create --replication-factor 2 --partitions 10 --topic OrderGo
+```
