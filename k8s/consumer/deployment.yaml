@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: consumer
+spec:
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: consumer
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: consumer
+  name: consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consumer
+  template:
+    metadata:
+      labels:
+        app: consumer
+    spec:
+      containers:
+        - image: ratnadeepb/slops-consumer:latest
+          name: consumer
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SVC_TIME_MS # how long the requests take to be processed
+              value: "10"
