@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: server-config
+data:
+  config.yaml: |
+    service: "producer"
+    update_interval: 10
+    update_interval_unit: "second"
+    threshold: 10
+    chg_percent: 10
+    partitions: 10
+    grpc_port: 4000
+    http_port: 2048

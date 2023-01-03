@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: producer
+spec:
+  ports:
+  - port: 2048
+    protocol: TCP
+    targetPort: 2048
+  selector:
+    app: producer
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default                                                                                                                         
+  labels:                                                                                                          
+    app: producer
+  name: producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: producer
+  template:
+    metadata:
+      labels:
+        app: producer
+    spec:
+      containers:
+      - image: ratnadeepb/lossycount:latest
+        name: producer
+        ports:
+        - containerPort: 62000
+        volumeMounts:
+        - name: config
+          mountPath: /etc/producer/
+        env:
+        - name: NODE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: ADDRESS
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      serviceAccountName: producer-accnt
+      volumes:
+      - name: config
+        configMap:
+          name: server-config
