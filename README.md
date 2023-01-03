@@ -2,7 +2,7 @@
 
 ## SLOPSClient
 
-This is an open loop client that generates keys according to a zipf distribution with configurable parameters. These keys are then sent to the [producer](#slopsproducer)
+This is an open loop client that generates keys according to a zipf distribution with configurable parameters. These keys are then sent to the [producer](#slopsproducer).
 
 ## SLOPSProducer
 
