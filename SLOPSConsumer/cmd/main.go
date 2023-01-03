@@ -32,7 +32,7 @@ func main() {
 	config := sarama.NewConfig()
 	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.BalanceStrategySticky}
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
-	config.ClientID = os.Getenv("POD_IP")
+	config.ClientID = os.Getenv("ADDRESS")
 	// config.Consumer.Fetch.Max = 10
 	// config.Consumer.Fetch.Min = 8
 
