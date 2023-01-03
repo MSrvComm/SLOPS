@@ -112,7 +112,7 @@ func (consumer *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
 
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
 func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	containerIP := os.Getenv("POD_IP")
+	containerIP := os.Getenv("ADDRESS")
 
 	// env vars
 	svcTm, err := strconv.Atoi(os.Getenv("SVC_TIME_MS"))
