@@ -22,6 +22,7 @@ func (app *Application) getProdConfig() *sarama.Config {
 	config.Producer.Compression = sarama.CompressionSnappy // Compress messages
 	config.Producer.Return.Successes = true
 	config.Producer.Flush.Frequency = 500 * time.Millisecond // Flush batches every 500ms
+	config.ClientID = os.Getenv("ADDRESS")
 	return config
 }
 
@@ -34,7 +35,8 @@ type SysDetails struct {
 
 func NewSysDetails() SysDetails {
 	return SysDetails{
-		kafkaBrokers: []string{"kafka-service:9092"},
+		// kafkaBrokers: []string{"kafka-service:9092"},
+		kafkaBrokers: []string{os.Getenv("KAFKA_BOOTSTRAP")},
 		kafkaTopic:   "OrderGo",
 	}
 }
@@ -45,7 +47,7 @@ type EnvVar struct {
 }
 
 func NewEnvVar() EnvVar {
-	containerIP := os.Getenv("POD_IP")
+	containerIP := os.Getenv("ADDRESS")
 
 	return EnvVar{
 		containerIP: containerIP,
@@ -65,7 +67,8 @@ func (app *Application) NewProducer() Producer {
 	sysDetails := NewSysDetails()
 
 	config := app.getProdConfig()
-	kafkaProducer, err := sarama.NewAsyncProducer([]string{"kafka-service:9092"}, config)
+	// kafkaProducer, err := sarama.NewAsyncProducer([]string{"kafka-service:9092"}, config)
+	kafkaProducer, err := sarama.NewAsyncProducer([]string{os.Getenv("KAFKA_BOOTSTRAP")}, config)
 	if err != nil {
 		log.Println("Error creating producer:", err.Error())
 	}

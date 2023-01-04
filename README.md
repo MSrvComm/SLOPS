@@ -46,3 +46,22 @@ kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluste
 ```bash
 kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluster.local:2181 --create --replication-factor 2 --partitions 10 --topic OrderGo
 ```
+
+## Strimzi
+
+[Strimzi Documentation](https://strimzi.io/documentation/)
+
+### Install the Operator in NS 'slops'
+
+```bash
+kubectl create ns slops
+kubectl create -f 'https://strimzi.io/install/latest?namespace=slops' -n slops
+```
+
+### Create the cluster
+
+This creates a cluster with 3 brokers and 1 zookeeper.
+
+```bash
+kubectl apply -f k8s/cluster/kafka-ephemeral.yaml -n slops
+```

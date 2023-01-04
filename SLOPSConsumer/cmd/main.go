@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	kafkaConn = "kafka-service:9092"
-	topic     = "OrderGo"
-	group     = "OrderGroup"
+	// kafkaConn = "kafka-service:9092"
+	topic = "OrderGo"
+	group = "OrderGroup"
 )
 
 func main() {
@@ -35,6 +35,8 @@ func main() {
 	config.ClientID = os.Getenv("ADDRESS")
 	// config.Consumer.Fetch.Max = 10
 	// config.Consumer.Fetch.Min = 8
+
+	kafkaConn := os.Getenv("KAFKA_BOOTSTRAP")
 
 	c := Consumer{
 		// ready:  make(chan bool),
