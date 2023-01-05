@@ -1,5 +1,12 @@
 #!/bin/bash
 kubectl create ns slops
-./start_cluster.sh
-./perms.sh
-./apps/deploy.sh all
+
+BASEDIR=$(pwd)
+if [[ $BASEDIR == *"scripts" ]]
+then
+    BASEDIR+="/.."
+fi
+
+$BASEDIR/start_cluster.sh
+$BASEDIR/perms.sh
+$BASEDIR/apps/deploy.sh all
