@@ -19,8 +19,6 @@ metadata:
     app: consumer
   name: consumer
   namespace: slops
-  # annotations:
-  #   "sidecar.jaegertracing.io/inject": "true"
 spec:
   replicas: 1
   selector:

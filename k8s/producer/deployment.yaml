@@ -20,8 +20,6 @@ metadata:
     app: producer
   name: producer
   namespace: slops
-  # annotations:
-  #   "sidecar.jaegertracing.io/inject": "true"
 spec:
   replicas: 1
   selector:
@@ -53,8 +51,6 @@ spec:
           value: "ordergo-kafka-bootstrap:9092"
         - name: TRACE_URL
           value: "http://slops-tracer:14268/new"
-        - name: PARTITION
-          value: "10"
       serviceAccountName: producer-accnt
       volumes:
       - name: config
