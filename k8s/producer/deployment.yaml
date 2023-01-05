@@ -50,7 +50,7 @@ spec:
         - name: KAFKA_BOOTSTRAP
           value: "ordergo-kafka-bootstrap:9092"
         - name: VANILLA
-          value: true
+          value: "true"
         - name: TRACE_URL
           value: "http://slops-tracer:14268/new"
       serviceAccountName: producer-accnt
