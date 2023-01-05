@@ -8,6 +8,7 @@ spec:
     - port: 14268
       protocol: TCP
       targetPort: 14268
+      nodePort: 30513
   selector:
     app: tracer
   type: LoadBalancer
