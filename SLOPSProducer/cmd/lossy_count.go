@@ -3,7 +3,11 @@ package main
 import (
 	"log"
 	"math"
+	"math/rand"
 	"sync"
+	"time"
+
+	"github.com/MSrvComm/SLOPSProducer/internal"
 )
 
 func (app *Application) LossyCount(wg *sync.WaitGroup) {
@@ -35,6 +39,13 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 			for index, rec := range items {
 				if rec.Count+rec.Bucket < currentBucket {
 					itemsToBeDeleted = append(itemsToBeDeleted, index)
+				} else {
+					weight := float64(rec.Count) / float64(app.conf.Threshold)
+					p := app.MapToPartition(rec)
+					app.Lock()
+					app.partitionWeights[p] += weight
+					app.Unlock()
+					app.keyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
 				}
 			}
 			currentBucket++
@@ -60,4 +71,19 @@ func checkKeyList(key string, items *[]Record) (int, bool) {
 		}
 	}
 	return -1, false
+}
+
+func (app *Application) MapToPartition(rec Record) int {
+	rand.Seed(time.Now().UnixNano())
+
+	p1 := rand.Intn(app.conf.Partitions)
+	p2 := rand.Intn(app.conf.Partitions)
+
+	v1 := app.partitionWeights[p1]
+	v2 := app.partitionWeights[p2]
+
+	if v1 > v2 {
+		return p2
+	}
+	return p1
 }

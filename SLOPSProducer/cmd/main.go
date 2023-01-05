@@ -46,10 +46,12 @@ func main() {
 
 	traceURL := os.Getenv("TRACE_URL")
 	app := Application{
-		ch:     make(chan string),
-		keyMap: &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
-		logger: log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
-		traceUrl: traceURL,
+		ch:               make(chan string),
+		conf:             conf,
+		keyMap:           &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
+		partitionWeights: make([]float64, conf.Partitions),
+		logger:           log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
+		traceUrl:         traceURL,
 	}
 
 	// Start the lossy count thread.
