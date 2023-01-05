@@ -40,15 +40,31 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 				if rec.Count+rec.Bucket < currentBucket {
 					itemsToBeDeleted = append(itemsToBeDeleted, index)
 				} else {
+					// Calculate the weight of the key.
 					weight := float64(rec.Count) / float64(app.conf.Threshold)
-					p := app.MapToPartition(rec)
-					app.Lock()
-					app.partitionWeights[p] += weight
-					app.Unlock()
-					app.keyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
+					// Check if it is already mapped to a partition.
+					if keyrec, err := app.keyMap.GetKey(rec.Key); err != nil {
+						p := app.MapToPartition(rec) // Get a mapping to a partition.
+						// Lock the partition weights and update.
+						app.Lock()
+						app.partitionWeights[p] += weight
+						app.Unlock()
+						// Add the new mapping.
+						app.keyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
+					} else { // Mapping already exists.
+						// Adjust the weight compared to old weight.
+						weight -= float64(keyrec.Count) / float64(app.conf.Threshold)
+						// Update the weight on the partition.
+						app.Lock()
+						app.partitionWeights[keyrec.Partition] += weight
+						app.Unlock()
+
+					}
 				}
 			}
+			// Increment bucket.
 			currentBucket++
+			// Delete items marked for deletion.
 			for _, index := range itemsToBeDeleted {
 				if index > 0 {
 					items = append(items[:index-1], items[index+1:]...)
