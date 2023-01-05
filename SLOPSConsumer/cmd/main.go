@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -11,11 +13,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"go.opentelemetry.io/otel"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
-	"go.opentelemetry.io/otel/trace"
-
-	"go.opentelemetry.io/contrib/instrumentation/github.com/Shopify/sarama/otelsarama"
 )
 
 const (
@@ -37,13 +34,13 @@ func main() {
 	// config.Consumer.Fetch.Min = 8
 
 	kafkaConn := os.Getenv("KAFKA_BOOTSTRAP")
+	traceURL := os.Getenv("TRACE_URL")
 
-	c := Consumer{
-		// ready:  make(chan bool),
-		// config: config,
+	consumer := Consumer{
+		traceURL: traceURL,
+		ready:    make(chan bool),
+		config:   config,
 	}
-
-	consumer := otelsarama.WrapConsumerGroupHandler(&c)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	client, err := sarama.NewConsumerGroup([]string{kafkaConn}, group, config)
@@ -59,7 +56,7 @@ func main() {
 			// `Consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
-			if err := client.Consume(ctx, []string{topic}, consumer); err != nil {
+			if err := client.Consume(ctx, []string{topic}, &consumer); err != nil {
 				log.Panicf("Error from consumer: %v", err)
 			}
 
@@ -67,11 +64,11 @@ func main() {
 			if ctx.Err() != nil {
 				return
 			}
-			// consumer.ready = make(chan bool)
+			consumer.ready = make(chan bool)
 		}
 	}()
 
-	// <-consumer.ready // Await till the consumer has been set up
+	<-consumer.ready // Await till the consumer has been set up
 	log.Println("Sarama consumer up and running!...")
 
 	sigterm := make(chan os.Signal, 1)
@@ -96,14 +93,15 @@ func main() {
 }
 
 type Consumer struct {
-	// ready  chan bool
-	// config *sarama.Config
+	traceURL string
+	ready    chan bool
+	config   *sarama.Config
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
 func (consumer *Consumer) Setup(sarama.ConsumerGroupSession) error {
 	// Mark consumer as ready.
-	// close(consumer.ready)
+	close(consumer.ready)
 	return nil
 }
 
@@ -129,21 +127,19 @@ func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 	for {
 		select {
 		case message := <-claim.Messages():
-			ctx := otel.GetTextMapPropagator().Extract(context.Background(), otelsarama.NewConsumerMessageCarrier(message))
-
-			tr := otel.Tracer("consumer")
-			_, span := tr.Start(ctx, "consume message", trace.WithAttributes(
-				semconv.MessagingOperationProcess,
-			))
-			defer span.End()
-
 			key := string(message.Key)
 			val := string(message.Value)
+			hdrs := message.Headers
 			start := time.Now()
 			// workhorse
 			for {
 				if time.Since(start) > time.Duration(svcTm) {
 					break
+				}
+			}
+			for _, hdr := range hdrs {
+				if string(hdr.Key) == "Sequence" {
+					go consumer.CloseTrace(string(hdr.Value))
 				}
 			}
 			log.Printf("Container %s processed \"%s\" for key \"%s\"", containerIP, key, val)
@@ -156,4 +152,14 @@ func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 			return nil
 		}
 	}
+}
+
+func (consumer *Consumer) CloseTrace(seq string) {
+	url := fmt.Sprintf("%s/%s", consumer.traceURL, seq)
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Println("Failed to connect to:", url)
+		return
+	}
+	log.Printf("Response status %d from url %s\n", resp.StatusCode, url)
 }

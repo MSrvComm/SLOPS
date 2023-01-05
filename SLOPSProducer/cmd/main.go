@@ -44,9 +44,12 @@ func main() {
 
 	waitGroup := &sync.WaitGroup{}
 
-	app := Application{ch: make(chan string),
+	traceURL := os.Getenv("TRACE_URL")
+	app := Application{
+		ch:     make(chan string),
 		keyMap: &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
 		logger: log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
+		traceUrl: traceURL,
 	}
 
 	// Start the lossy count thread.
@@ -54,6 +57,7 @@ func main() {
 	go app.LossyCount(waitGroup)
 
 	// Start Kafka producer.
+	app.seq = NewSequencer()
 	app.producer = app.NewProducer()
 	successes := 0
 	errors := 0

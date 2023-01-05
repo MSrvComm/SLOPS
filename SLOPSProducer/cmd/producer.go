@@ -2,13 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"github.com/Shopify/sarama"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/Shopify/sarama/otelsarama"
-	"go.opentelemetry.io/otel"
 )
 
 func (app *Application) getProdConfig() *sarama.Config {
@@ -67,36 +66,47 @@ func (app *Application) NewProducer() Producer {
 	sysDetails := NewSysDetails()
 
 	config := app.getProdConfig()
-	// kafkaProducer, err := sarama.NewAsyncProducer([]string{"kafka-service:9092"}, config)
-	kafkaProducer, err := sarama.NewAsyncProducer([]string{os.Getenv("KAFKA_BOOTSTRAP")}, config)
+	// kafkaProducer, err := sarama.NewAsyncProducer([]string{os.Getenv("KAFKA_BOOTSTRAP")}, config)
+	kafkaProducer, err := sarama.NewAsyncProducer(sysDetails.kafkaBrokers, config)
 	if err != nil {
 		log.Println("Error creating producer:", err.Error())
 	}
-
-	// Wrap instrumentation.
-	kafkaWrappedProducer := otelsarama.WrapAsyncProducer(config, kafkaProducer)
 
 	return Producer{
 		envVar:        envVar,
 		sysDetails:    sysDetails,
 		kafkaConfig:   config,
-		kafkaProducer: kafkaWrappedProducer,
+		kafkaProducer: kafkaProducer,
 	}
 }
 
 func (app *Application) Produce(ctx context.Context, key, msg string, partition ...int) {
 	var kmsg *sarama.ProducerMessage
+	// Add sequencing.
+	seq := fmt.Sprintf("%s-%d", app.producer.envVar.containerIP, app.seq.Next())
+	hdrs := []sarama.RecordHeader{
+		{
+			Key:   []byte("Producer"),
+			Value: []byte(app.producer.envVar.containerIP),
+		},
+		{
+			Key:   []byte("Sequence"),
+			Value: []byte(seq),
+		},
+	}
 	if len(partition) == 0 {
 		kmsg = &sarama.ProducerMessage{
-			Topic: app.producer.sysDetails.kafkaTopic,
-			Key:   sarama.StringEncoder(key),
-			Value: sarama.StringEncoder(msg),
+			Topic:   app.producer.sysDetails.kafkaTopic,
+			Key:     sarama.StringEncoder(key),
+			Value:   sarama.StringEncoder(msg),
+			Headers: hdrs,
 		}
 	} else if len(partition) == 1 {
 		kmsg = &sarama.ProducerMessage{
 			Topic:     app.producer.sysDetails.kafkaTopic,
 			Key:       sarama.StringEncoder(key),
 			Value:     sarama.StringEncoder(msg),
+			Headers:   hdrs,
 			Partition: int32(partition[0]),
 		}
 	} else {
@@ -104,13 +114,10 @@ func (app *Application) Produce(ctx context.Context, key, msg string, partition 
 		return
 	}
 
-	// Create root span.
-	tr := otel.Tracer("producer")
-	_, span := tr.Start(context.Background(), "produce message")
-	defer span.End()
-
-	otel.GetTextMapPropagator().Inject(ctx, otelsarama.NewProducerMessageCarrier(kmsg))
-
 	app.producer.kafkaProducer.Input() <- kmsg
+	// Send the trace info.
+	go func(seq string) {
+		app.SendSequence(seq)
+	}(seq)
 	log.Println("message sent")
 }
