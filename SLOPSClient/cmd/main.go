@@ -112,4 +112,5 @@ func main() {
 	log.Println(high_freqs)
 	log.Println("length freqs:", len(frequencies))
 	log.Println("length high freqs:", len(high_freqs))
+	log.Println("Total requests made:", i)
 }
