@@ -32,19 +32,19 @@ kubectl create -f https://github.com/jaegertracing/jaeger-operator/releases/down
 ## Kafka Commands
 
 ```bash
-kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluster.local:2181 --list
+kubectl exec -it ordergo-kafka-0 -n slops -- bin/kafka-topics.sh --bootstrap-server ordergo-kafka-bootstrap:9092 --list
 ```
 
 ```bash
-kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluster.local:2181 --describe --topic OrderGo
+kubectl exec -it ordergo-kafka-0 -n slops -- bin/kafka-topics.sh --bootstrap-server ordergo-kafka-bootstrap:9092 --describe --topic OrderGo
 ```
 
 ```bash
-kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluster.local:2181 --delete --topic OrderGo
+kubectl exec -it ordergo-kafka-0 -n slops -- bin/kafka-topics.sh --bootstrap-server ordergo-kafka-bootstrap:9092 --delete --topic OrderGo
 ```
 
 ```bash
-kubectl exec -it kafka-0 -- kafka-topics.sh --zookeeper zk-cs.default.svc.cluster.local:2181 --create --replication-factor 2 --partitions 10 --topic OrderGo
+kubectl exec -it ordergo-kafka-0 -n slops -- bin/kafka-topics.sh --bootstrap-server ordergo-kafka-bootstrap:9092 --create --replication-factor 2 --partitions 10 --topic OrderGo
 ```
 
 ## Strimzi
@@ -64,4 +64,29 @@ This creates a cluster with 3 brokers and 1 zookeeper.
 
 ```bash
 kubectl apply -f k8s/cluster/kafka-ephemeral.yaml -n slops
+```
+
+## Automatic Build and Deployment
+
+The build and deployment scripts are located in the [`scripts`](./scripts/) folders while the Kubernetes deployment files are located in the [`k8s`](./k8s/) folder.
+
+Furthermore, the `Kafka` related scripts are in [`kafka`](./scripts/kafka/) subfolder and the application related scripts are in the [`apps`](./scripts/apps/) subfolder.
+
+The kafka topic creation [script](./scripts/kafka/create.sh) takes a single parameter indicating number of partitions to be created. The apps [`deploy`](./scripts/apps/deploy.sh) and [`delete`](./scripts/apps/delete.sh) scripts take a parameter to indicate whether to shutdown a specific application or all the applications.
+
+Starting and stopping the main cluster can be done through the [start](./scripts/start_cluster.sh) and [stop](./scripts/stop_cluster.sh) scripts.
+
+The system initialization [script](./scripts/init_system.sh) does the following:
+- Create the `slops` namespace.
+- Deploy the Kafka cluster.
+- Deploy the applications.
+
+After that the client can be run with the [run](./scripts/apps/run.sh) script. The run script accepts the following arguments:
+- The request rate (Default 200).
+- The total number of requests to be made (Default 1000).
+- The number of keys to choose from (Default 2800).
+
+Usage:
+```bash
+./SLOPSClient/SLOPSClient --rate 200 --iter 1000 --keys 2800
 ```
