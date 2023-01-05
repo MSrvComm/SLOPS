@@ -19,10 +19,15 @@ func (app *Application) NewMessage(c *gin.Context) {
 	}
 
 	log.Println("message sending")
-	if rec, err := app.keyMap.GetKey(input.Key); err != nil {
+	// Use the basic version.
+	if app.vanilla {
 		go app.Produce(c.Request.Context(), input.Key, input.Body)
-	} else {
-		go app.Produce(c.Request.Context(), input.Key, input.Body, rec.Partition)
+	} else { // Use the mapped key version.
+		if rec, err := app.keyMap.GetKey(input.Key); err != nil {
+			go app.Produce(c.Request.Context(), input.Key, input.Body)
+		} else {
+			go app.Produce(c.Request.Context(), input.Key, input.Body, rec.Partition)
+		}
 	}
 	log.Println("http returning")
 

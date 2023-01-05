@@ -9,6 +9,7 @@ import (
 
 type Application struct {
 	sync.Mutex
+	vanilla          bool // Do not use the key mapping.
 	ch               chan string
 	conf             internal.Config
 	keyMap           *internal.KeyMap

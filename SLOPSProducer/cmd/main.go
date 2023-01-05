@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"time"
 
@@ -44,14 +45,18 @@ func main() {
 
 	waitGroup := &sync.WaitGroup{}
 
-	traceURL := os.Getenv("TRACE_URL")
+	vanilla, err := strconv.ParseBool(os.Getenv("VANILLA"))
+	if err != nil {
+		log.Fatal("Vanilla val not correct:", err)
+	}
 	app := Application{
+		vanilla:          vanilla,
 		ch:               make(chan string),
 		conf:             conf,
 		keyMap:           &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
 		partitionWeights: make([]float64, conf.Partitions),
 		logger:           log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
-		traceUrl:         traceURL,
+		traceUrl:         os.Getenv("TRACE_URL"),
 	}
 
 	// Start the lossy count thread.
