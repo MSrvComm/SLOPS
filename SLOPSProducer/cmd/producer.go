@@ -83,7 +83,7 @@ func (app *Application) NewProducer() Producer {
 func (app *Application) Produce(ctx context.Context, key, msg string, partition ...int) {
 	var kmsg *sarama.ProducerMessage
 	// Add sequencing.
-	seq := fmt.Sprintf("%s-%d", app.producer.envVar.containerIP, app.seq.Next())
+	seq := fmt.Sprintf("%s-%s-%d", app.producer.envVar.containerIP, key, app.seq.Next())
 	hdrs := []sarama.RecordHeader{
 		{
 			Key:   []byte("Producer"),
