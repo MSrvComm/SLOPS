@@ -1,7 +1,8 @@
 go 1.19
 
 use (
-    ./SLOPSClient
-    ./SLOPSProducer
-    ./SLOPSConsumer   
+	./SLOPSClient
+	./SLOPSProducer
+	./SLOPSConsumer
+	./SLOPSTracer
 )
