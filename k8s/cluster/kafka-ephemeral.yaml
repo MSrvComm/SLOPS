@@ -2,10 +2,11 @@ apiVersion: kafka.strimzi.io/v1beta2
 kind: Kafka
 metadata:
   name: ordergo
+  namespace: slops
 spec:
   kafka:
     version: 3.3.1
-    replicas: 3
+    replicas: 4
     listeners:
       - name: plain
         port: 9092

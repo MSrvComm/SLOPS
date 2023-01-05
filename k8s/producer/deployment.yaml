@@ -20,8 +20,8 @@ metadata:
     app: producer
   name: producer
   namespace: slops
-  annotations:
-    "sidecar.jaegertracing.io/inject": "true"
+  # annotations:
+  #   "sidecar.jaegertracing.io/inject": "true"
 spec:
   replicas: 1
   selector:
@@ -51,6 +51,10 @@ spec:
               fieldPath: status.podIP
         - name: KAFKA_BOOTSTRAP
           value: "ordergo-kafka-bootstrap:9092"
+        - name: TRACE_URL
+          value: "http://slops-tracer:14268/new"
+        - name: JAEGER_ENDPOINT
+          value: "http://jaeger-trace-collector:14268/api/traces"
       serviceAccountName: producer-accnt
       volumes:
       - name: config
