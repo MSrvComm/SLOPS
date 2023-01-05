@@ -53,8 +53,8 @@ spec:
           value: "ordergo-kafka-bootstrap:9092"
         - name: TRACE_URL
           value: "http://slops-tracer:14268/new"
-        - name: JAEGER_ENDPOINT
-          value: "http://jaeger-trace-collector:14268/api/traces"
+        - name: PARTITION
+          value: "10"
       serviceAccountName: producer-accnt
       volumes:
       - name: config
