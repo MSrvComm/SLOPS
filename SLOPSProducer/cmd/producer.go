@@ -2,13 +2,42 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"github.com/Shopify/sarama"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/Shopify/sarama/otelsarama"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
+
+func TracerProvider() (*sdktrace.TracerProvider, error) {
+	url := os.Getenv("TRACER_COLLECTOR")
+	// Create Jaeger exporter.
+	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(url)))
+	if err != nil {
+		return nil, err
+	}
+	svcName := os.Getenv("TRACER_NAME")
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(svcName),
+			attribute.String("exporter", "jaeger"),
+		)),
+	)
+	otel.SetTracerProvider(tp)
+	return tp, nil
+}
 
 func (app *Application) getProdConfig() *sarama.Config {
 	// sarama logging to stdout.
@@ -66,11 +95,20 @@ func (app *Application) NewProducer() Producer {
 	sysDetails := NewSysDetails()
 
 	config := app.getProdConfig()
-	// kafkaProducer, err := sarama.NewAsyncProducer([]string{os.Getenv("KAFKA_BOOTSTRAP")}, config)
+
 	kafkaProducer, err := sarama.NewAsyncProducer(sysDetails.kafkaBrokers, config)
+	propagators := propagation.TraceContext{}
+	// Wrap instrumentation
+	kafkaProducer = otelsarama.WrapAsyncProducer(
+		config,
+		kafkaProducer,
+		otelsarama.WithTracerProvider(otel.GetTracerProvider()),
+		otelsarama.WithPropagators(propagators),
+	)
 	if err != nil {
 		log.Println("Error creating producer:", err.Error())
 	}
+	log.Println("propogators:", kafkaProducer)
 
 	return Producer{
 		envVar:        envVar,
@@ -80,18 +118,30 @@ func (app *Application) NewProducer() Producer {
 	}
 }
 
-func (app *Application) Produce(ctx context.Context, key, msg string, partition ...int) {
+func (app *Application) Produce(key, msg string, partition ...int) {
+	tp, tperr := TracerProvider()
+	if tperr != nil {
+		log.Fatal(tperr)
+	}
+
+	// Cleanly shutdown and flush telemetry when the application exits.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer func(ctx context.Context) {
+		// Do not make the application hang when it is shutdown.
+		ctx, cancel = context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+		if err := tp.Shutdown(ctx); err != nil {
+			log.Fatal(err)
+		}
+	}(ctx)
+
 	var kmsg *sarama.ProducerMessage
-	// Add sequencing.
-	seq := fmt.Sprintf("%s-%s-%d", app.producer.envVar.containerIP, key, app.seq.Next())
+
 	hdrs := []sarama.RecordHeader{
 		{
 			Key:   []byte("Producer"),
 			Value: []byte(app.producer.envVar.containerIP),
-		},
-		{
-			Key:   []byte("Sequence"),
-			Value: []byte(seq),
 		},
 	}
 	if len(partition) == 0 {
@@ -114,10 +164,15 @@ func (app *Application) Produce(ctx context.Context, key, msg string, partition 
 		return
 	}
 
+	// Create root span
+	tr := tp.Tracer("producer")
+	ctx, span := tr.Start(context.Background(), "produce message")
+	defer span.End()
+
+	propagators := propagation.TraceContext{}
+	propagators.Inject(ctx, otelsarama.NewProducerMessageCarrier(kmsg))
+	span.SetAttributes(attribute.String("test-producer-span-key", "test-producer-span-value"))
+
 	app.producer.kafkaProducer.Input() <- kmsg
-	// Send the trace info.
-	go func(seq string) {
-		app.SendSequence(seq)
-	}(seq)
 	log.Println("message sent")
 }

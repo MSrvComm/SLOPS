@@ -56,7 +56,6 @@ func main() {
 		keyMap:           &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
 		partitionWeights: make([]float64, conf.Partitions),
 		logger:           log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
-		traceUrl:         os.Getenv("TRACE_URL"),
 	}
 
 	// Start the lossy count thread.
@@ -64,7 +63,6 @@ func main() {
 	go app.LossyCount(waitGroup)
 
 	// Start Kafka producer.
-	app.seq = NewSequencer()
 	app.producer = app.NewProducer()
 	successes := 0
 	errors := 0

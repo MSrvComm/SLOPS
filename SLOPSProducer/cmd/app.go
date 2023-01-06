@@ -15,7 +15,5 @@ type Application struct {
 	keyMap           *internal.KeyMap
 	partitionWeights []float64
 	logger           *log.Logger
-	seq              *Sequencer
-	traceUrl         string
 	producer         Producer
 }

@@ -12,15 +12,22 @@ The SLOPS producer creates Kafka events and sends them to Kafka after marking th
 
 This consumer gets the messages from Kafka and extracts the Jaeger span while "processing" the message for a configured amount of time.
 
-## Tracing Infrastucture
+## Deploying Jaeger
 
-Each producer generates a unique sequence for every new request and updates it to separate tracer service. The producer then adds the sequence number to the message generated from the request.
+[How to deploy Jaeger](https://www.jaegertracing.io/docs/1.40/operator/)
 
-The consumer, upon receiving a message, processes the message and extracts the sequence. The consumer then sends the sequence to the tracer service.
+### Install the Cert Manager
 
-The tracer service opens a trace with a start time upon receiving a sequence from a producer. The tracer keeps the trace open till it receives the same sequence number from the consumer. At this point the tracer closes the trace and saves it as a completed job. A completed job is a trace ID with duration for which the trace was open.
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.9.1/cert-manager.yaml
+```
 
-A third API, `/all`, can be used to fetch the entire list of completed jobs.
+### Install the Jaeger Operator
+
+```bash
+kubectl create namespace observability
+kubectl create -f https://github.com/jaegertracing/jaeger-operator/releases/download/v1.40.0/jaeger-operator.yaml -n observability
+```
 
 ## Kafka Commands
 

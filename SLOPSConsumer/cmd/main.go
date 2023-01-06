@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -13,6 +11,14 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/Shopify/sarama/otelsarama"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 )
 
 const (
@@ -21,7 +27,45 @@ const (
 	group = "OrderGroup"
 )
 
+func TracerProvider() (*sdktrace.TracerProvider, error) {
+	url := os.Getenv("TRACER_COLLECTOR")
+	// Create Jaeger exporter.
+	exp, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(url)))
+	if err != nil {
+		return nil, err
+	}
+	svcName := os.Getenv("TRACER_NAME")
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(svcName),
+			attribute.String("exporter", "jaeger"),
+		)),
+	)
+	otel.SetTracerProvider(tp)
+	return tp, nil
+}
+
 func main() {
+	tp, tperr := TracerProvider()
+
+	if tperr != nil {
+		log.Fatal(tperr)
+	}
+
+	// Cleanly shutdown and flush telemetry when the application exits.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer func(ctx context.Context) {
+		// Do not make the application hang when it is shutdown.
+		ctx, cancel = context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+		if err := tp.Shutdown(ctx); err != nil {
+			log.Fatal(err)
+		}
+	}(ctx)
+
 	keepRunning := true
 	// sarama logging to stdout.
 	sarama.Logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile)
@@ -34,15 +78,12 @@ func main() {
 	// config.Consumer.Fetch.Min = 8
 
 	kafkaConn := os.Getenv("KAFKA_BOOTSTRAP")
-	traceURL := os.Getenv("TRACE_URL")
 
-	consumer := Consumer{
-		traceURL: traceURL,
-		ready:    make(chan bool),
-		config:   config,
-	}
+	c := Consumer{}
+	propagators := propagation.TraceContext{}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	consumer := otelsarama.WrapConsumerGroupHandler(&c, otelsarama.WithPropagators(propagators))
+
 	client, err := sarama.NewConsumerGroup([]string{kafkaConn}, group, config)
 	if err != nil {
 		log.Panicf("Error creating consumer group client: %v", err)
@@ -56,7 +97,7 @@ func main() {
 			// `Consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
-			if err := client.Consume(ctx, []string{topic}, &consumer); err != nil {
+			if err := client.Consume(ctx, []string{topic}, consumer); err != nil {
 				log.Panicf("Error from consumer: %v", err)
 			}
 
@@ -64,11 +105,9 @@ func main() {
 			if ctx.Err() != nil {
 				return
 			}
-			consumer.ready = make(chan bool)
 		}
 	}()
 
-	<-consumer.ready // Await till the consumer has been set up
 	log.Println("Sarama consumer up and running!...")
 
 	sigterm := make(chan os.Signal, 1)
@@ -92,16 +131,10 @@ func main() {
 	}
 }
 
-type Consumer struct {
-	traceURL string
-	ready    chan bool
-	config   *sarama.Config
-}
+type Consumer struct{}
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
 func (consumer *Consumer) Setup(sarama.ConsumerGroupSession) error {
-	// Mark consumer as ready.
-	close(consumer.ready)
 	return nil
 }
 
@@ -127,22 +160,7 @@ func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 	for {
 		select {
 		case message := <-claim.Messages():
-			key := string(message.Key)
-			val := string(message.Value)
-			hdrs := message.Headers
-			start := time.Now()
-			// workhorse
-			for {
-				if time.Since(start) > time.Duration(svcTm) {
-					break
-				}
-			}
-			for _, hdr := range hdrs {
-				if string(hdr.Key) == "Sequence" {
-					go consumer.CloseTrace(string(hdr.Value))
-				}
-			}
-			log.Printf("Container %s processed \"%s\" for key \"%s\"", containerIP, key, val)
+			printMessage(message, svcTm, containerIP)
 			// Commit message
 			session.MarkMessage(message, "")
 		// Should return when `session.Context()` is done.
@@ -154,12 +172,40 @@ func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 	}
 }
 
-func (consumer *Consumer) CloseTrace(seq string) {
-	url := fmt.Sprintf("%s/%s", consumer.traceURL, seq)
-	resp, err := http.Get(url)
-	if err != nil {
-		log.Println("Failed to connect to:", url)
-		return
+func printMessage(msg *sarama.ConsumerMessage, svcTm int, ip string) {
+	// Extract tracing info from message
+	propagators := propagation.TraceContext{}
+	ctx := propagators.Extract(context.Background(), otelsarama.NewConsumerMessageCarrier(msg))
+	log.Println("HEADERS:", msg.Headers)
+	tr := otel.Tracer("consumer")
+
+	// Create a span.printMessage
+	_, span := tr.Start(ctx, "print message")
+
+	defer span.End()
+
+	// Inject current span context, so any further processing can use it to propagate span.
+	propagators.Inject(ctx, otelsarama.NewConsumerMessageCarrier(msg))
+
+	// workhorse
+	key := string(msg.Key)
+	hdrs := msg.Headers
+	start := time.Now()
+	for {
+		if time.Since(start) > time.Duration(svcTm) {
+			break
+		}
 	}
-	log.Printf("Response status %d from url %s\n", resp.StatusCode, url)
+	for _, hdr := range hdrs {
+		if string(hdr.Key) == "Producer" {
+			log.Println("Arrived from producer:", string(hdr.Value))
+		}
+	}
+
+	time.Sleep(time.Millisecond * time.Duration(svcTm))
+	// Set any additional attributes that might make sense
+	// span.SetAttributes(attribute.String("consumed message at offset",strconv.FormatInt(int64(msg.Offset),10)))
+	// span.SetAttributes(attribute.String("consumed message to partition",strconv.FormatInt(int64(msg.Partition),10)))
+	span.SetAttributes(attribute.Int64("message_bus.destination", int64(msg.Partition)))
+	log.Printf("Container %s processed key \"%s\" at offset \"%d\"", ip, key, msg.Offset)
 }

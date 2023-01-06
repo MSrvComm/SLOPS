@@ -10,7 +10,6 @@ fi
 
 if [[ $1 == "all" ]]
 then
-    kubectl apply -f $BASEDIR/k8s/tracer/deployment.yaml
     kubectl apply -f $BASEDIR/k8s/consumer/deployment.yaml
     kubectl apply -f $BASEDIR/k8s/producer/configmap.yaml
     kubectl apply -f $BASEDIR/k8s/producer/deployment.yaml
