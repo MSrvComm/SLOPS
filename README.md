@@ -86,4 +86,8 @@ Usage:
 
 ### Repeating the experiment
 
-Generally, it involves redeploying the apps and recreating the kafka topics. The [`clean`](./scripts/clean.sh) script does this automatically. It accepts a `--vanilla bool` argument that sets the `VANILLA` environment argument in the producer's deployment yaml. This in turn tells the producer whether we want to use the SLOPS method or just the vanilla system.
+Generally, it involves redeploying the apps and recreating the kafka topics. The [`redeploy`](./scripts/redeploy.sh) script does this automatically. It accepts a `--vanilla bool` argument that sets the `VANILLA` environment argument in the producer's deployment yaml. This in turn tells the producer whether we want to use the SLOPS method or just the vanilla system.
+
+```bash
+. scripts/redeploy.sh
+```

@@ -8,6 +8,9 @@ while [ $# -gt 0 ]; do
     fi
     shift
 done
+
+VANILLA=$vanilla
+
 ./scripts/apps/delete.sh all
 sleep 5
 ./scripts/kafka/delete.sh
