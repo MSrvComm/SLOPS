@@ -83,3 +83,7 @@ Usage:
 ```bash
 ./SLOPSClient/SLOPSClient --rate 200 --iter 1000 --keys 2800
 ```
+
+### Repeating the experiment
+
+Generally, it involves redeploying the apps and recreating the kafka topics. The [`clean`](./scripts/clean.sh) script does this automatically. It accepts a `--vanilla bool` argument that sets the `VANILLA` environment argument in the producer's deployment yaml. This in turn tells the producer whether we want to use the SLOPS method or just the vanilla system.
