@@ -15,6 +15,7 @@ This consumer gets the messages from Kafka and extracts the Jaeger span while "p
 ## Deploying Jaeger
 
 [How to deploy Jaeger](https://www.jaegertracing.io/docs/1.40/operator/)
+[Tracing Kafka Records](https://newrelic.com/blog/how-to-relic/distributed-tracing-with-kafka)
 
 ### Install the Cert Manager
 
