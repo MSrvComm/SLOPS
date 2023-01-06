@@ -20,7 +20,7 @@ metadata:
   name: consumer
   namespace: slops
 spec:
-  replicas: 1
+  replicas: 10
   selector:
     matchLabels:
       app: consumer
