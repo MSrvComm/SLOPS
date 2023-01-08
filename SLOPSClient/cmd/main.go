@@ -34,22 +34,20 @@ func Generator(next chan bool, abort chan struct{}, num_keys uint64) <-chan stri
 
 func main() {
 	// User args.
-	var rt float64
-	var burst int
+	var rt int
 	var keys int
 	var iters int
 	var url string
 
 	// flags declaration.
-	flag.Float64Var(&rt, "rate", 200, "Rate of requests per second")
-	flag.IntVar(&burst, "burst", 200, "Maximum burst allowed")
+	flag.IntVar(&rt, "rate", 200, "Rate of requests per second")
 	flag.IntVar(&keys, "keys", 2800, "Number of keys to choose from")
 	flag.IntVar(&iters, "iter", 1_000, "Number of times the test is run")
 	flag.StringVar(&url, "url", "https://httpbin.org/anything/", "URL to test")
 
 	flag.Parse()
 
-	limiter := rate.NewLimiter(rate.Limit(rt), burst)
+	limiter := rate.NewLimiter(rate.Every(time.Second), rt)
 	ctx := context.Background()
 
 	// num_keys := uint64(28_000_000)
