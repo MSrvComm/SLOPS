@@ -171,7 +171,8 @@ func (app *Application) Produce(key, msg string, partition ...int) {
 
 	propagators := propagation.TraceContext{}
 	propagators.Inject(ctx, otelsarama.NewProducerMessageCarrier(kmsg))
-	span.SetAttributes(attribute.String("test-producer-span-key", "test-producer-span-value"))
+	// Add the key as a Jaeger tag.
+	span.SetAttributes(attribute.String("producer.key", key))
 
 	app.producer.kafkaProducer.Input() <- kmsg
 	log.Println("message sent")
