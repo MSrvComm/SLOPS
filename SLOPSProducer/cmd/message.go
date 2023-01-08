@@ -22,7 +22,8 @@ func (app *Application) NewMessage(c *gin.Context) {
 	// Use the basic version.
 	if app.vanilla {
 		go app.Produce(input.Key, input.Body)
-	} else { // Use the mapped key version.
+	} else { // Use the SLOPS algorithm.
+		app.ch <- input.Key // Send the key to the lossy counter.
 		if rec, err := app.keyMap.GetKey(input.Key); err != nil {
 			go app.Produce(input.Key, input.Body)
 		} else {
