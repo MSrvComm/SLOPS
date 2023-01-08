@@ -9,6 +9,9 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -47,8 +50,13 @@ func main() {
 
 	flag.Parse()
 
-	limiter := rate.NewLimiter(rate.Every(time.Second), rt)
+	limiter := rate.NewLimiter(rate.Limit(rt), rt)
 	ctx := context.Background()
+
+	c := make(chan os.Signal, 1)
+	// Passing no signals to Notify means that
+	// all signals will be sent to the channel.
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	// num_keys := uint64(28_000_000)
 	num_keys := uint64(keys)
@@ -61,6 +69,15 @@ func main() {
 	i := 0
 
 	frequencies := make(map[string]int)
+
+	go func() {
+		<-c
+		log.Println("Rate:", rt)
+		log.Println("Iters:", iters)
+		log.Println("length freqs:", len(frequencies))
+		log.Println("Total requests made:", i)
+		os.Exit(1)
+	}()
 
 	for i < iters {
 		if err := limiter.Wait(ctx); err != nil {
@@ -106,7 +123,10 @@ func main() {
 			high_freqs[k] = v
 		}
 	}
+	output(high_freqs, frequencies, i)
+}
 
+func output(high_freqs, frequencies map[string]int, i int) {
 	log.Println(high_freqs)
 	log.Println("length freqs:", len(frequencies))
 	log.Println("length high freqs:", len(high_freqs))
