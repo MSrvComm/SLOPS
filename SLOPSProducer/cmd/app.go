@@ -7,13 +7,14 @@ import (
 	"github.com/MSrvComm/SLOPSProducer/internal"
 )
 
+// Application is the workhorse of the system.
 type Application struct {
 	sync.Mutex
-	vanilla          bool // Do not use the key mapping.
-	ch               chan string
-	conf             internal.Config
-	keyMap           *internal.KeyMap
-	partitionWeights []float64
-	logger           *log.Logger
-	producer         Producer
+	vanilla          bool             // If true then do not use the SLOPS algorithm.
+	ch               chan string      // Receive incoming keys through this channel.
+	conf             internal.Config  // Hold the configuration data.
+	keyMap           *internal.KeyMap // Mapping of hot keys.
+	partitionWeights []float64        // Weights of each partition.
+	logger           *log.Logger      // System level logger.
+	producer         Producer         // Kafka producer.
 }

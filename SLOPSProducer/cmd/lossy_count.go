@@ -13,34 +13,38 @@ import (
 func (app *Application) LossyCount(wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	// Hold the hot key records.
 	items := make([]Record, 0)
 	currentBucket := 1
 	N := 0
-	epsilon := 0.1
+	epsilon := 0.1 // The error we can withstand.
 	for {
 		key := <-app.ch
 		N++
 
+		// Key already is known.
 		if index, b := checkKeyList(key, &items); b {
 			items[index].Count++
-		} else {
+		} else { // Adding new key.
 			rec := Record{Key: key, Count: 1, Bucket: currentBucket - 1}
 			items = append(items, rec)
 		}
 
+		// Defining a width that adjusts with number of inputs and error margin.
 		width := int(math.Ceil(float64(N) * epsilon))
 		if width < 10 {
 			width = 10
 		}
 		log.Println("Width:", width)
 
+		// Once the bucket turns over.
 		if N%width == 0 {
 			itemsToBeDeleted := make([]int, 0)
 			for index, rec := range items {
 				if rec.Count+rec.Bucket < currentBucket {
 					itemsToBeDeleted = append(itemsToBeDeleted, index)
 				} else {
-					// Calculate the weight of the key.
+					// Calculate the weight of keys that are not being deleted.
 					weight := float64(rec.Count) / float64(app.conf.Threshold)
 					// Check if it is already mapped to a partition.
 					if keyrec, err := app.keyMap.GetKey(rec.Key); err != nil {
@@ -80,6 +84,7 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 	}
 }
 
+// Check if key is already being tracked.
 func checkKeyList(key string, items *[]Record) (int, bool) {
 	for index, rec := range *items {
 		if rec.Key == key {
@@ -92,14 +97,22 @@ func checkKeyList(key string, items *[]Record) (int, bool) {
 func (app *Application) MapToPartition(rec Record) int {
 	rand.Seed(time.Now().UnixNano())
 
-	p1 := rand.Intn(app.conf.Partitions)
-	p2 := rand.Intn(app.conf.Partitions)
-
-	v1 := app.partitionWeights[p1]
-	v2 := app.partitionWeights[p2]
-
-	if v1 > v2 {
-		return p2
+	part := 0
+	for p := 1; p < app.conf.Partitions; p++ {
+		if app.partitionWeights[part] > app.partitionWeights[p] {
+			part = p
+		}
 	}
-	return p1
+	return part
+
+	// p1 := rand.Intn(app.conf.Partitions)
+	// p2 := rand.Intn(app.conf.Partitions)
+
+	// v1 := app.partitionWeights[p1]
+	// v2 := app.partitionWeights[p2]
+
+	// if v1 > v2 {
+	// 	return p2
+	// }
+	// return p1
 }
