@@ -8,9 +8,9 @@ then
     BASEDIR+="/.."
 fi
 
-rate=${rate:-200}
-iter=${iter:-1000}
-keys=${keys:-2800}
+rate=${rate:-1500}
+iter=${iter:-1000000}
+keys=${keys:-28000000}
 
 while [ $# -gt 0 ]; do
     if [[ $1 == "--"* ]]; then
