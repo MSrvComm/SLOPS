@@ -99,3 +99,29 @@ Generally, it involves redeploying the apps and recreating the kafka topics. The
 ```bash
 . scripts/redeploy.sh
 ```
+
+## Checking Processing Times By Partition
+
+Filter data in the Jaeger UI by the partition number tags (under service `consumer`):
+
+```None
+messaging.kafka.partition=<partition_number>
+```
+
+In order to filter by key, use the tag (under service `producer`):
+
+```None
+producer.key=<key>
+```
+
+The same information is available with the tag:
+
+```None
+consumer.key=<key>
+```
+
+Filtering results for `key` and `partition` can be done with:
+
+```None
+consumer.key=<key> message_bus.destination=<partition_number>
+```
