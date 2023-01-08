@@ -39,11 +39,10 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 
 		// Once the bucket turns over.
 		if N%width == 0 {
-			itemsToBeDeleted := make([]int, 0)
-			for index, rec := range items {
-				if rec.Count+rec.Bucket < currentBucket {
-					itemsToBeDeleted = append(itemsToBeDeleted, index)
-				} else {
+			newItems := make([]Record, 0)
+			for _, rec := range items {
+				if rec.Count+rec.Bucket >= currentBucket {
+					newItems = append(newItems, rec)
 					// Calculate the weight of keys that are not being deleted.
 					weight := float64(rec.Count) / float64(app.conf.Threshold)
 					// Check if it is already mapped to a partition.
@@ -68,14 +67,8 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 			}
 			// Increment bucket.
 			currentBucket++
-			// Delete items marked for deletion.
-			for _, index := range itemsToBeDeleted {
-				if index > 0 {
-					items = append(items[:index-1], items[index+1:]...)
-				} else {
-					items = items[1:]
-				}
-			}
+			// Switch items.
+			items = newItems
 		}
 
 		log.Println("N:", N)
