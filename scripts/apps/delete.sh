@@ -12,6 +12,7 @@ fi
 if [[ $1 == "all" ]]
 then
     kubectl delete -f $BASEDIR/k8s/consumer/deployment.yaml
+    kubectl delete -f $BASEDIR/k8s/producer/configmap.yaml
     kubectl delete -f $BASEDIR/k8s/producer/deployment.yaml
 else
     kubectl delete -f $BASEDIR/k8s/$1/deployment.yaml
