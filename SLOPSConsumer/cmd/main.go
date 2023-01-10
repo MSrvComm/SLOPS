@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	_ "go.uber.org/automaxprocs"
 )
 
 const (
@@ -44,6 +45,7 @@ func TracerProvider() (*sdktrace.TracerProvider, error) {
 		)),
 	)
 	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}))
 	return tp, nil
 }
 
@@ -79,10 +81,10 @@ func main() {
 
 	kafkaConn := os.Getenv("KAFKA_BOOTSTRAP")
 
-	c := Consumer{}
+	consumer := Consumer{ready: make(chan bool)}
 	propagators := propagation.TraceContext{}
 
-	consumer := otelsarama.WrapConsumerGroupHandler(&c, otelsarama.WithPropagators(propagators))
+	handler := otelsarama.WrapConsumerGroupHandler(&consumer, otelsarama.WithPropagators(propagators))
 
 	client, err := sarama.NewConsumerGroup([]string{kafkaConn}, group, config)
 	if err != nil {
@@ -97,7 +99,7 @@ func main() {
 			// `Consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
-			if err := client.Consume(ctx, []string{topic}, consumer); err != nil {
+			if err := client.Consume(ctx, []string{topic}, handler); err != nil {
 				log.Panicf("Error from consumer: %v", err)
 			}
 
@@ -105,9 +107,11 @@ func main() {
 			if ctx.Err() != nil {
 				return
 			}
+			consumer.ready = make(chan bool)
 		}
 	}()
 
+	<-consumer.ready // Await till the consumer has been set up
 	log.Println("Sarama consumer up and running!...")
 
 	sigterm := make(chan os.Signal, 1)
@@ -131,10 +135,14 @@ func main() {
 	}
 }
 
-type Consumer struct{}
+type Consumer struct {
+	ready chan bool
+}
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
 func (consumer *Consumer) Setup(sarama.ConsumerGroupSession) error {
+	// Mark the consumer as ready
+	close(consumer.ready)
 	return nil
 }
 
@@ -192,7 +200,7 @@ func printMessage(msg *sarama.ConsumerMessage, svcTm int, ip string) {
 	hdrs := msg.Headers
 	start := time.Now()
 	for {
-		if time.Since(start) > time.Duration(svcTm) {
+		if time.Since(start) > time.Duration(svcTm)*time.Microsecond {
 			break
 		}
 	}
