@@ -125,3 +125,13 @@ Filtering results for `key` and `partition` can be done with:
 ```None
 consumer.key=<key> message_bus.destination=<partition_number>
 ```
+
+### Getting the data from Jaeger
+
+```Python
+import requests
+url = f"http://localhost:16686/api/traces?service={service}&loopback={hours}h&prettyPrint=true&limit={limit}"
+requests.get(url)
+```
+
+where `service` is the service for which we are attempting to download the traces, `hours` is how far back in hours we should look and `limit` is the number of traces we want to download.
