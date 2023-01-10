@@ -4,9 +4,9 @@ metadata:
   name: jaeger-trace
   namespace: slops
 spec:
-  strategy: allInOne
+  strategy: production
   allInOne:
-    image: jaegertracing/all-in-one:latest
+    # image: jaegertracing/all-in-one:latest
     options:
       log-level: debug
   storage:
@@ -20,3 +20,7 @@ spec:
     strategy: DaemonSet
   annotations:
     scheduler.alpha.kubernetes.io/critical-pod: ""
+  ui:
+    options:
+      search:
+        maxLimit: 1000000
