@@ -36,6 +36,7 @@ func TracerProvider() (*sdktrace.TracerProvider, error) {
 		)),
 	)
 	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}))
 	return tp, nil
 }
 
