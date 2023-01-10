@@ -1,6 +1,7 @@
 #!/bin/bash
 ./scripts/apps/delete.sh all
-sleep 5
+kubectl wait --for=delete deployment/consumer -n slops
+kubectl wait --for=delete deployment/producer -n slops
 ./scripts/kafka/delete.sh
-./scripts/kafka/create.sh 10
+./scripts/kafka/create.sh $1
 ./scripts/apps/deploy.sh all
