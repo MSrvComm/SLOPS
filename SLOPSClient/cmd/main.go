@@ -20,7 +20,9 @@ import (
 func Generator(next chan bool, abort chan struct{}, num_keys uint64) <-chan string {
 	ch := make(chan string)
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	zipf := rand.NewZipf(r, 3.14, 2.72, num_keys)
+	// zipf := rand.NewZipf(r, 3.14, 2.72, num_keys)
+	// zipf := rand.NewZipf(r, 1.1, 2.72, num_keys)
+	zipf := rand.NewZipf(r, 5, 2.72, num_keys)
 	go func() {
 		defer close(ch)
 		for {
