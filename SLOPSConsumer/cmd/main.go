@@ -216,5 +216,9 @@ func printMessage(msg *sarama.ConsumerMessage, svcTm int, ip string) {
 	// span.SetAttributes(attribute.String("consumed message to partition",strconv.FormatInt(int64(msg.Partition),10)))
 	span.SetAttributes(attribute.Int64("message_bus.destination", int64(msg.Partition)))
 	span.SetAttributes(attribute.String("consumer.key", key))
-	log.Printf("Container %s processed key \"%s\" at offset \"%d\"", ip, key, msg.Offset)
+	log.Printf("Container %s processed key \"%s\" from \"%d\" at offset \"%d\"",
+		ip,
+		key,
+		msg.Partition,
+		msg.Offset)
 }
