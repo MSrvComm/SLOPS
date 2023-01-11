@@ -49,8 +49,19 @@ func main() {
 	if err != nil {
 		log.Fatal("Vanilla val not correct:", err)
 	}
+	p2c, err := strconv.ParseBool(os.Getenv("P2C"))
+	if err != nil {
+		log.Fatal("P2C val not correct:", err)
+	}
+
+	lossy, err := strconv.ParseBool(os.Getenv("LOSSY"))
+	if err != nil {
+		log.Fatal("lossy val not correct:", err)
+	}
+
 	app := Application{
 		vanilla:          vanilla,
+		p2c:              p2c,
 		ch:               make(chan string),
 		conf:             conf,
 		keyMap:           &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
@@ -59,8 +70,14 @@ func main() {
 	}
 
 	// Start the lossy count thread.
-	waitGroup.Add(1)
-	go app.LossyCount(waitGroup)
+	if !app.vanilla {
+		waitGroup.Add(1)
+		if lossy {
+			go app.LossyCount(waitGroup)
+		} else {
+			go app.ExactCount(waitGroup)
+		}
+	}
 
 	// Start Kafka producer.
 	app.producer = app.NewProducer()

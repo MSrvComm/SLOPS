@@ -52,6 +52,9 @@ func (app *Application) getProdConfig() *sarama.Config {
 	config.Producer.Return.Successes = true
 	config.Producer.Flush.Frequency = 500 * time.Millisecond // Flush batches every 500ms
 	config.ClientID = os.Getenv("ADDRESS")
+	if !app.vanilla {
+		config.Producer.Partitioner = sarama.NewManualPartitioner
+	}
 	return config
 }
 

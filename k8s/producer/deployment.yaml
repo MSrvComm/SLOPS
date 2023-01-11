@@ -50,6 +50,10 @@ spec:
         - name: KAFKA_BOOTSTRAP
           value: "ordergo-kafka-bootstrap:9092"
         - name: VANILLA
+          value: "false"
+        - name: P2C
+          value: "false"
+        - name: LOSSY
           value: "true"
         - name: TRACER_NAME
           value: "producer"

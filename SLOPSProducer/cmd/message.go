@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"math/rand"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,11 +26,14 @@ func (app *Application) NewMessage(c *gin.Context) {
 		go app.Produce(input.Key, input.Body)
 	} else { // Use the SLOPS algorithm.
 		app.ch <- input.Key // Send the key to the lossy counter.
+		var partition int
 		if rec, err := app.keyMap.GetKey(input.Key); err != nil {
-			go app.Produce(input.Key, input.Body)
+			rand.Seed(time.Now().UnixNano())
+			partition = rand.Intn(app.conf.Partitions)
 		} else {
-			go app.Produce(input.Key, input.Body, rec.Partition)
+			partition = rec.Partition
 		}
+		go app.Produce(input.Key, input.Body, partition)
 	}
 	log.Println("http returning")
 
