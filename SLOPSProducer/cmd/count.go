@@ -79,70 +79,58 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 	items := make([]Record, 0)
 	currentBucket := 1
 	N := 0
-	epsilon := 0.1 // The error we can withstand.
+	epsilon := 0.1 // The error we are willing to withstand.
 
-	// Reset the counters every 30 seconds. Prevent window size from becoming too large.
-	ticker := time.NewTicker(30 * time.Second)
 	for {
-		select {
-		case <-ticker.C:
-			N = 0
-		default:
-			key := <-app.ch
-			N++
+		key := <-app.ch
+		N++
 
-			// Key already is known.
-			if index, b := checkKeyList(key, &items); b {
-				items[index].Count++
-			} else { // Adding new key.
-				rec := Record{Key: key, Count: 1, Bucket: currentBucket - 1}
-				items = append(items, rec)
-			}
+		// Key already is known.
+		if index, b := checkKeyList(key, &items); b {
+			items[index].Count++
+		} else { // Adding new key.
+			rec := Record{Key: key, Count: 1, Bucket: currentBucket - 1}
+			items = append(items, rec)
+		}
 
-			// Defining a width that adjusts with number of inputs and error margin.
-			width := int(math.Ceil(float64(N) * epsilon))
-			if width < app.conf.Threshold {
-				width = app.conf.Threshold
-			}
-			log.Println("Width:", width)
+		width := int(math.Ceil(1 / epsilon))
 
-			// Once the bucket turns over.
-			if N%width == 0 {
-				newItems := make([]Record, 0)
-				for _, rec := range items {
-					if rec.Count+rec.Bucket >= currentBucket {
-						newItems = append(newItems, rec)
-						// Calculate the weight of keys that are not being deleted.
-						weight := float64(rec.Count) / float64(app.conf.Threshold)
-						// Check if it is already mapped to a partition.
-						if keyrec, err := app.keyMap.GetKey(rec.Key); err != nil {
-							p := app.MapToPartition(rec) // Get a mapping to a partition.
-							// Lock the partition weights and update.
-							app.Lock()
-							app.partitionWeights[p] += weight
-							app.Unlock()
-							// Add the new mapping.
-							app.keyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
-						} else { // Mapping already exists.
-							// Adjust the weight compared to old weight.
-							weight -= float64(keyrec.Count) / float64(app.conf.Threshold)
-							// Update the weight on the partition.
-							app.Lock()
-							app.partitionWeights[keyrec.Partition] += weight
-							app.Unlock()
-						}
+		// Once the bucket turns over.
+		if N%width == 0 {
+			newItems := make([]Record, 0)
+			for _, rec := range items {
+				if rec.Count+rec.Bucket >= currentBucket {
+					newItems = append(newItems, rec)
+					// Calculate the weight of keys that are not being deleted.
+					weight := float64(rec.Count) / float64(app.conf.Threshold)
+					// Check if it is already mapped to a partition.
+					if keyrec, err := app.keyMap.GetKey(rec.Key); err != nil {
+						p := app.MapToPartition(rec) // Get a mapping to a partition.
+						// Lock the partition weights and update.
+						app.Lock()
+						app.partitionWeights[p] += weight
+						app.Unlock()
+						// Add the new mapping.
+						app.keyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
+					} else { // Mapping already exists.
+						// Adjust the weight compared to old weight.
+						weight -= float64(keyrec.Count) / float64(app.conf.Threshold)
+						// Update the weight on the partition.
+						app.Lock()
+						app.partitionWeights[keyrec.Partition] += weight
+						app.Unlock()
 					}
 				}
-				// Increment bucket.
-				currentBucket++
-				// Switch items.
-				items = newItems
 			}
-
-			log.Println("N:", N)
-			log.Println("Current Bucket:", currentBucket)
-			log.Println(items)
+			// Increment bucket.
+			currentBucket++
+			// Switch items.
+			items = newItems
 		}
+
+		log.Println("N:", N)
+		log.Println("Current Bucket:", currentBucket)
+		log.Println(items)
 	}
 }
 
