@@ -12,7 +12,7 @@ type KeyRecord struct {
 }
 
 type KeyMap struct {
-	sync.RWMutex
+	sync.Mutex
 	KV map[string]KeyRecord
 }
 
@@ -29,8 +29,8 @@ func (k *KeyMap) AddKey(rec KeyRecord) *KeyRecord {
 }
 
 func (k *KeyMap) GetKey(key string) (*KeyRecord, error) {
-	k.RLock()
-	defer k.RUnlock()
+	k.Lock()
+	defer k.Unlock()
 
 	if val, ok := k.KV[key]; !ok {
 		return nil, errors.New("no such value")
@@ -44,4 +44,8 @@ func (k *KeyMap) Del(key string) {
 	defer k.Unlock()
 
 	delete(k.KV, key)
+}
+
+func (k *KeyMap) Len() int {
+	return len(k.KV)
 }
