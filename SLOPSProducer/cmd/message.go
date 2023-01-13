@@ -34,8 +34,8 @@ func (app *Application) NewMessage(c *gin.Context) {
 			partition = rec.Partition
 		}
 		go app.Produce(input.Key, input.Body, partition)
+		log.Println("Keymap size:", app.keyMap.Len())
 	}
-	log.Println("http returning")
 
 	log.Println("Received new request:", input)
 }
