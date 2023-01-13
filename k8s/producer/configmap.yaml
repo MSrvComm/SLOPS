@@ -8,7 +8,7 @@ data:
     service: "producer"
     update_interval: 10
     update_interval_unit: "second"
-    threshold: 10
+    threshold: 50
     chg_percent: 10
     partitions: 10
     grpc_port: 4000
