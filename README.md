@@ -1,5 +1,7 @@
 # SLOPS: Switching Load in Order Preserving Systems
 
+This branch has code to run unordered messages using SLOPS through a single producer to consumers.
+
 ## SLOPSClient
 
 This is an open loop client that generates keys according to a zipf distribution with configurable parameters. These keys are then sent to the [producer](#slopsproducer).
