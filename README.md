@@ -1,12 +1,23 @@
 # SLOPS: Switching Load in Order Preserving Systems
 
+## Branches
+
+- `unordered`: holds the code for testing with messages where no ordering is required and has a single producer i.e. producers do not talk about which keys are assigned to which partition and consumer process each message as they arrive.
+
 ## SLOPSClient
 
 This is an open loop client that generates keys according to a zipf distribution with configurable parameters. These keys are then sent to the [producer](#slopsproducer).
 
+The generated keys are of the format `location_<number>`.
+
 ## SLOPSProducer
 
 The SLOPS producer creates Kafka events and sends them to Kafka after marking them with Jaeger spans.
+
+The producer can be configured in different ways using environment variables.
+- `VANILLA`: decides whether the producer uses the SLOPS algorithms or the vanilla Kafka ones.
+- `P2C`: should the producer use power-of-two-random-choices (P2C) to assign flows to partitions.
+- `LOSSY`: should it use lossy counting or count every message explicitly.
 
 ## SLOPSConsumer
 
