@@ -21,8 +21,8 @@ func Generator(next chan bool, abort chan struct{}, num_keys uint64) <-chan stri
 	ch := make(chan string)
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// zipf := rand.NewZipf(r, 3.14, 2.72, num_keys)
-	// zipf := rand.NewZipf(r, 1.1, 2.72, num_keys)
-	zipf := rand.NewZipf(r, 5, 2.72, num_keys)
+	zipf := rand.NewZipf(r, 1.1, 2.72, num_keys)
+	// zipf := rand.NewZipf(r, 5, 2.72, num_keys)
 	go func() {
 		defer close(ch)
 		for {
@@ -48,7 +48,8 @@ func main() {
 	flag.IntVar(&rt, "rate", 200, "Rate of requests per second")
 	flag.IntVar(&keys, "keys", 2800, "Number of keys to choose from")
 	flag.IntVar(&iters, "iter", 1_000, "Number of times the test is run")
-	flag.StringVar(&url, "url", "https://httpbin.org/anything/", "URL to test")
+	// flag.StringVar(&url, "url", "http://httpbin.org/anything/", "URL to test")
+	flag.StringVar(&url, "url", "dummy", "URL to test")
 
 	flag.Parse()
 
@@ -102,12 +103,14 @@ func main() {
 			log.Fatal(err)
 		}
 
-		log.Println("URL:", url)
-		res, err := http.Post(url, "application/json", bytes.NewBuffer(json_data))
-		if err != nil {
-			log.Printf("Error %v calling with %s\n", err, x)
-		} else {
-			log.Printf("Response to %s: %v\n", x, res)
+		log.Printf("URL: %s, data: %v\n", url, json_data)
+		if url != "dummy" { // dummy means user wants to test.
+			res, err := http.Post(url, "application/json", bytes.NewBuffer(json_data))
+			if err != nil {
+				log.Printf("Error %v calling with %s\n", err, x)
+			} else {
+				log.Printf("Response to %s: %v\n", x, res)
+			}
 		}
 
 		if v, exists := frequencies[x]; exists {
@@ -118,19 +121,23 @@ func main() {
 		i += 1
 	}
 	close(abort)
+	output(frequencies, i, keys)
+}
+
+func output(frequencies map[string]int, i, keys int) {
 	log.Println(frequencies)
 	high_freqs := make(map[string]int)
+	high_freq_reqs := 0
 	for k, v := range frequencies {
 		if v > 100 {
 			high_freqs[k] = v
+			high_freq_reqs += v
 		}
 	}
-	output(high_freqs, frequencies, i)
-}
-
-func output(high_freqs, frequencies map[string]int, i int) {
 	log.Println(high_freqs)
 	log.Println("length freqs:", len(frequencies))
 	log.Println("length high freqs:", len(high_freqs))
+	log.Println("#High Frequency Requests:", high_freq_reqs)
 	log.Println("Total requests made:", i)
+	log.Println("Keyspace size:", keys)
 }
