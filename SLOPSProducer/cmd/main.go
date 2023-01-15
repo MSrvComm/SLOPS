@@ -60,13 +60,15 @@ func main() {
 	}
 
 	app := Application{
-		vanilla:          vanilla,
-		p2c:              p2c,
-		ch:               make(chan string),
-		conf:             conf,
-		keyMap:           &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
-		partitionWeights: make([]float64, conf.Partitions),
-		logger:           log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
+		vanilla:           vanilla,
+		p2c:               p2c,
+		ch:                make(chan string),
+		conf:              conf,
+		keyMap:            &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
+		messageSets:       &MessageSetMap{KV: map[string]MessageSet{}},
+		partitionWeights:  make([]float64, conf.Partitions),
+		randomPartitioner: internal.NewRandomPartitioner(),
+		logger:            log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
 	}
 
 	// Start the lossy count thread.

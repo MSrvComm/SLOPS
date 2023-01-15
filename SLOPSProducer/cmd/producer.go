@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"log"
 	"os"
 	"time"
@@ -52,6 +54,11 @@ func (app *Application) getProdConfig() *sarama.Config {
 	config.Producer.Return.Successes = true
 	config.Producer.Flush.Frequency = 500 * time.Millisecond // Flush batches every 500ms
 	config.ClientID = os.Getenv("ADDRESS")
+	// if app.vanilla {
+	// 	config.Producer.Partitioner = sarama.NewRandomPartitioner
+	// } else {
+	// 	config.Producer.Partitioner = sarama.NewManualPartitioner
+	// }
 	if !app.vanilla {
 		config.Producer.Partitioner = sarama.NewManualPartitioner
 	}
@@ -122,7 +129,7 @@ func (app *Application) NewProducer() Producer {
 	}
 }
 
-func (app *Application) Produce(key, msg string, partition ...int) {
+func (app *Application) Produce(key, msg string, partition ...int32) {
 	tp, tperr := TracerProvider()
 	if tperr != nil {
 		log.Fatal(tperr)
@@ -148,6 +155,8 @@ func (app *Application) Produce(key, msg string, partition ...int) {
 			Value: []byte(app.producer.envVar.containerIP),
 		},
 	}
+
+	// When Kafka is used.
 	if len(partition) == 0 {
 		kmsg = &sarama.ProducerMessage{
 			Topic:   app.producer.sysDetails.kafkaTopic,
@@ -155,13 +164,40 @@ func (app *Application) Produce(key, msg string, partition ...int) {
 			Value:   sarama.StringEncoder(msg),
 			Headers: hdrs,
 		}
-	} else if len(partition) == 1 {
-		kmsg = &sarama.ProducerMessage{
-			Topic:     app.producer.sysDetails.kafkaTopic,
-			Key:       sarama.StringEncoder(key),
-			Value:     sarama.StringEncoder(msg),
-			Headers:   hdrs,
-			Partition: int32(partition[0]),
+	} else if len(partition) == 1 { // When SLOPS is used.
+		// Adding message set header from producer.
+		msgset, partitionchanged := app.MsgsetHdrVal(key, partition[0])
+		var msgsetHdrVal bytes.Buffer
+		enc := gob.NewEncoder(&msgsetHdrVal)
+		err := enc.Encode(msgset)
+		if err != nil {
+			log.Println("Encoding err:", err)
+			return
+		}
+		msgsetHdr := sarama.RecordHeader{
+			Key:   []byte("SyncEvent"),
+			Value: msgsetHdrVal.Bytes(),
+		}
+		hdrs = append(hdrs, msgsetHdr)
+
+		// Send a message to the older partition that the message set has ended.
+		if partitionchanged {
+			kmsg = &sarama.ProducerMessage{
+				Topic:     app.producer.sysDetails.kafkaTopic,
+				Key:       sarama.StringEncoder(key),
+				Value:     sarama.StringEncoder(msg),
+				Headers:   hdrs,
+				Partition: msgset.SrcPartition,
+			}
+			log.Printf("Key %s switching to %d from %d\n", key, msgset.DestPartition, msgset.SrcPartition)
+		} else {
+			kmsg = &sarama.ProducerMessage{
+				Topic:     app.producer.sysDetails.kafkaTopic,
+				Key:       sarama.StringEncoder(key),
+				Value:     sarama.StringEncoder(msg),
+				Headers:   hdrs,
+				Partition: partition[0],
+			}
 		}
 	} else {
 		log.Println("Partition length:", len(partition))
@@ -179,5 +215,45 @@ func (app *Application) Produce(key, msg string, partition ...int) {
 	span.SetAttributes(attribute.String("producer.key", key))
 
 	app.producer.kafkaProducer.Input() <- kmsg
-	log.Println("message sent")
+	log.Println("message sent on partition:", kmsg.Partition)
+}
+
+// Create and send message set header
+func (app *Application) MsgsetHdrVal(key string, partition int32) (*MessageSet, bool) {
+	var msgset *MessageSet
+	partitionChanged := false
+	lastmsgset, err := app.messageSets.GetKey(key)
+	if err != nil {
+		// First message of key.
+		// Key is not being tracked.
+		msgset = &MessageSet{
+			Key:             key,
+			SrcPartition:    -1,
+			SrcMsgsetIndex:  -1,
+			DestPartition:   partition,
+			DestMsgsetIndex: 0,
+		}
+	} else {
+		if lastmsgset.DestPartition == partition {
+			// If we are still sending to the same partition,
+			// then no change required.
+			msgset = lastmsgset
+		} else {
+			// Otherwise, we are now sending to a new partition.
+			msgset = &MessageSet{
+				Key:             key,
+				SrcPartition:    lastmsgset.DestPartition,
+				SrcMsgsetIndex:  lastmsgset.DestMsgsetIndex,
+				DestPartition:   partition,
+				DestMsgsetIndex: lastmsgset.DestMsgsetIndex + 1,
+			}
+			partitionChanged = true
+		}
+	}
+
+	if partitionChanged {
+		go app.messageSets.AddKey(*msgset)
+	}
+
+	return msgset, partitionChanged
 }

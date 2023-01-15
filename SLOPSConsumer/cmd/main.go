@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"log"
 	"os"
 	"os/signal"
@@ -204,9 +206,29 @@ func printMessage(msg *sarama.ConsumerMessage, svcTm int, ip string) {
 			break
 		}
 	}
+
 	for _, hdr := range hdrs {
 		if string(hdr.Key) == "Producer" {
 			log.Println("Arrived from producer:", string(hdr.Value))
+		}
+
+		// Detect and Handle sync events.
+		if string(hdr.Key) == "SyncEvent" {
+			dec := gob.NewDecoder(bytes.NewBuffer(hdr.Value))
+			var msgset MessageSet
+			err := dec.Decode(&msgset)
+			if err != nil {
+				log.Println("Decoding err:", err)
+				return
+			}
+			// Check if this is the last message of a set.
+			if msgset.DestPartition != msg.Partition {
+				HandleShiftKey(key)
+			}
+			// Ignore new streams.
+			if msgset.SrcPartition > -1 && msgset.SrcMsgsetIndex > -1 {
+				HandleSyncEvent(msgset)
+			}
 		}
 	}
 
@@ -221,4 +243,22 @@ func printMessage(msg *sarama.ConsumerMessage, svcTm int, ip string) {
 		key,
 		msg.Partition,
 		msg.Offset)
+}
+
+// Handle key shift events.
+// This basically means that a consumer is being told that a stream (key)
+// has started a new message set on a different partition.
+func HandleShiftKey(key string) {
+	log.Println("Handling Shift Key event for:", key)
+}
+
+// Handle sync events.
+// This happens when a stream (key) has started a new message set
+// on this partition after having shifted from another partition.
+// This doesn't get triggered when a new stream is starting.
+func HandleSyncEvent(msgset MessageSet) {
+	log.Println("Handling Sync Event")
+	log.Printf("Key %s is starting message set %d on partition %d shifting from partition %d\n",
+		msgset.Key, msgset.DestMsgsetIndex, msgset.DestPartition, msgset.SrcPartition,
+	)
 }
