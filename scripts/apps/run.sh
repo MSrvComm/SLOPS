@@ -10,7 +10,7 @@ fi
 
 rate=${rate:-1500}
 iter=${iter:-90000}
-keys=${keys:-250}
+keys=${keys:-28000000}
 
 while [ $# -gt 0 ]; do
     if [[ $1 == "--"* ]]; then
