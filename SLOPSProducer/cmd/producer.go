@@ -59,9 +59,9 @@ func (app *Application) getProdConfig() *sarama.Config {
 	// } else {
 	// 	config.Producer.Partitioner = sarama.NewManualPartitioner
 	// }
-	if !app.vanilla {
-		config.Producer.Partitioner = sarama.NewManualPartitioner
-	}
+	// if !app.vanilla {
+	config.Producer.Partitioner = sarama.NewManualPartitioner
+	// }
 	return config
 }
 
