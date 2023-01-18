@@ -10,8 +10,8 @@ data:
     update_interval_unit: "second"
     threshold: 50
     chg_percent: 10
-    support: 0.0001
-    epsilon: 0.00001
+    support: 0.01
+    epsilon: 0.001
     partitions: 10
     grpc_port: 4000
     http_port: 2048
