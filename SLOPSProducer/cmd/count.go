@@ -39,7 +39,7 @@ func (app *Application) ExactCount(wg *sync.WaitGroup) {
 			// Reduce all counts.
 			go reduceCounts(&items)
 			// Calculate the weight of keys that are not being deleted.
-			weight := float64(rec.Count) / float64(app.conf.Threshold)
+			weight := float64(rec.Count) / float64(app.conf.FreqThreshold)
 			// Check if it is already mapped to a partition.
 			if keyrec, err := app.keyMap.GetKey(rec.Key); err != nil {
 				p := app.MapToPartition(rec) // Get a mapping to a partition.
@@ -59,7 +59,7 @@ func (app *Application) ExactCount(wg *sync.WaitGroup) {
 					app.Unlock()
 				} else {
 					// Check if weight change is over threshold.
-					oldWeight := float64(keyrec.Count) / float64(app.conf.Threshold)
+					oldWeight := float64(keyrec.Count) / float64(app.conf.FreqThreshold)
 					// If the change in weight is substantial, re-map the partition.
 					if math.Abs(oldWeight-weight)/oldWeight < float64(app.conf.ChgPercent/100.0) {
 						// Adjust the weight compared to old weight.
@@ -120,7 +120,7 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 					// If value is above a threshold.
 					if float64(rec.Count) >= (app.conf.Support-app.conf.Epsilon)*float64(N) {
 						// Calculate the weight of keys that are not being deleted.
-						weight := float64(rec.Count) / float64(app.conf.Threshold)
+						weight := float64(rec.Count) / float64(app.conf.FreqThreshold)
 						// Check if it is already mapped to a partition.
 						if keyrec, err := app.keyMap.GetKey(rec.Key); err != nil {
 							p := app.MapToPartition(rec) // Get a mapping to a partition.
@@ -133,7 +133,7 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 							app.keyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
 						} else { // Mapping already exists.
 							// Check if weight change is over threshold.
-							oldWeight := float64(keyrec.Count) / float64(app.conf.Threshold)
+							oldWeight := float64(keyrec.Count) / float64(app.conf.FreqThreshold)
 							// If the change in weight is substantial, re-map the partition.
 							if math.Abs(oldWeight-weight)/oldWeight < float64(app.conf.ChgPercent/100.0) {
 								// Adjust the weight compared to old weight.

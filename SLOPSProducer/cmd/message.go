@@ -3,6 +3,8 @@ package main
 import (
 	"hash/fnv"
 	"log"
+	"math/rand"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +30,10 @@ func (app *Application) NewMessage(c *gin.Context) {
 		}
 		go app.Produce(input.Key, input.Body, partition)
 	} else { // Use the SLOPS algorithm.
-		app.ch <- input.Key // Send the key to the lossy counter.
+		rand.Seed(time.Now().UnixNano())
+		if rand.Float64() >= app.conf.SampleThreshold {
+			app.ch <- input.Key // Send the key to the lossy counter.
+		}
 		var partition int32
 		if rec, err := app.keyMap.GetKey(input.Key); err != nil {
 			// partition = app.randomPartitioner.Partition(app.conf.Partitions)

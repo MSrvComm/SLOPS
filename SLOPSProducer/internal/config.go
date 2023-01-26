@@ -6,7 +6,8 @@ type Config struct {
 	Service            string  `yaml:"service"`
 	UpdateInterval     int     `yaml:"update_interval"`
 	UpdateIntervalUnit string  `yaml:"update_interval_unit"`
-	Threshold          int32   `yaml:"threshold"`
+	FreqThreshold      int32   `yaml:"freq_threshold"`
+	SampleThreshold    float64 `yaml:"sample_threshold"`
 	ChgPercent         int     `yaml:"chg_percent"`
 	Support            float64 `yaml:"support"`
 	Epsilon            float64 `yaml:"epsilon"`
