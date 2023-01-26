@@ -67,7 +67,7 @@ func main() {
 		keyMap:            &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
 		messageSets:       &MessageSetMap{KV: map[string]MessageSet{}},
 		partitionWeights:  make([]float64, conf.Partitions),
-		randomPartitioner: internal.NewRandomPartitioner(),
+		// randomPartitioner: internal.NewRandomPartitioner(),
 		logger:            log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
 	}
 
