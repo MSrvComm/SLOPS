@@ -61,6 +61,10 @@ kubectl exec -it ordergo-kafka-0 -n slops -- bin/kafka-topics.sh --bootstrap-ser
 kubectl exec -it ordergo-kafka-0 -n slops -- bin/kafka-topics.sh --bootstrap-server ordergo-kafka-bootstrap:9092 --create --replication-factor 2 --partitions 10 --topic OrderGo
 ```
 
+```bash
+kubectl exec -it ordergo-kafka-0 -n slops -- bin/kafka-topics.sh --bootstrap-server ordergo-kafka-bootstrap:9092 --alter --partitions 10 --topic OrderGo
+```
+
 ## Strimzi
 
 [Strimzi Documentation](https://strimzi.io/documentation/)
