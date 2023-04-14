@@ -60,15 +60,15 @@ func main() {
 	}
 
 	app := Application{
-		vanilla:           vanilla,
-		p2c:               p2c,
-		ch:                make(chan string),
-		conf:              conf,
-		keyMap:            &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
-		messageSets:       &MessageSetMap{KV: map[string]MessageSet{}},
-		partitionWeights:  make([]float64, conf.Partitions),
+		vanilla:          vanilla,
+		p2c:              p2c,
+		ch:               make(chan string),
+		conf:             conf,
+		keyMap:           &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
+		messageSets:      &MessageSetMap{KV: map[string]MessageSet{}},
+		partitionWeights: make([]float64, conf.Partitions),
 		// randomPartitioner: internal.NewRandomPartitioner(),
-		logger:            log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
+		logger: log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
 	}
 
 	// Start the lossy count thread.
@@ -94,7 +94,10 @@ func main() {
 	waitGroup.Add(1)
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
-		for range app.producer.kafkaProducer.Successes() {
+		for s := range app.producer.kafkaProducer.Successes() {
+			// Print out timestamp, partition and offset.
+			// Later we will use this to realize total rate of messages into a partition.
+			log.Printf("Received Offset: %d at time %v on partition %d\n", s.Offset, s.Timestamp, s.Partition)
 			successes++
 		}
 	}(waitGroup)
