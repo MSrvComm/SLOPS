@@ -1,4 +1,4 @@
-# SLOPS: Switching Load in Order Preserving Systems
+# SMALOPS: State Migration Aware Load Switching in Order Preserving Systems
 
 ## Branches
 
