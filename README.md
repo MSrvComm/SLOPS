@@ -41,6 +41,19 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 ```bash
 kubectl create namespace observability
 kubectl create -f https://github.com/jaegertracing/jaeger-operator/releases/download/v1.40.0/jaeger-operator.yaml -n observability
+kubectl apply -f k8s/cluster/jaeger.yaml
+```
+
+**Forwarding the Jaeger Trace port on Kuberenetes master node**
+
+```bash
+kubectl port-forward -n slops svc/jaeger-trace-query 16686:16686
+```
+
+**Forwarding the Jaeger Trace port over SSH**
+
+```bash
+ssh -L 16686:localhost:16686 node0
 ```
 
 ## Kafka Commands

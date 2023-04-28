@@ -50,11 +50,14 @@ spec:
         - name: KAFKA_BOOTSTRAP
           value: "ordergo-kafka-bootstrap:9092"
         - name: VANILLA
-          value: "false"
+          # value: "true" # original Kafka
+          value: "false" # SMALOPS
         - name: P2C
-          value: "true"
+          # value: "false"  # original Kafka
+          value: "true" # SMALOPS
         - name: LOSSY
-          value: "true"
+          # value: "false" # original Kafka
+          value: "true" # SMALOPS
         - name: TRACER_NAME
           value: "producer"
         - name: TRACER_COLLECTOR

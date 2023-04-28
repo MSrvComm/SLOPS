@@ -16,3 +16,4 @@ data:
     partitions: 10
     grpc_port: 4000
     http_port: 2048
+    swap_interval: 10

@@ -35,7 +35,7 @@ func (app *Application) NewMessage(c *gin.Context) {
 			app.ch <- input.Key // Send the key to the lossy counter.
 		}
 		var partition int32
-		if rec, err := app.keyMap.GetKey(input.Key); err != nil {
+		if rec, err := app.keyMap.GetKey(input.Key); err != nil { // Use KeyMap to decide partition.
 			// partition = app.randomPartitioner.Partition(app.conf.Partitions)
 			partition, err = hash(input.Key, app.conf.Partitions)
 			if err != nil {
@@ -45,7 +45,7 @@ func (app *Application) NewMessage(c *gin.Context) {
 			partition = rec.Partition
 			// Message Set header will be added by `Producer` when message is sent.
 			if rec.Delete {
-				app.keyMap.Del(rec.Key)
+				app.backupKeyMap.Del(rec.Key) // Delete in the backup key map only.
 			}
 		}
 		go app.Produce(input.Key, input.Body, partition)

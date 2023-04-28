@@ -53,7 +53,7 @@ func (app *Application) ExactCount(wg *sync.WaitGroup) {
 				}
 			} else { // Mapping already exists.
 				if rec.Count < 1 { // remove stale flows.
-					app.keyMap.MarkForDeletion(keyrec.Key)
+					app.backupKeyMap.MarkForDeletion(keyrec.Key)
 					app.Lock()
 					app.partitionWeights[keyrec.Partition] -= weight
 					app.Unlock()
@@ -122,7 +122,7 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 						// Calculate the weight of keys that are not being deleted.
 						weight := float64(rec.Count) / float64(app.conf.FreqThreshold)
 						// Check if it is already mapped to a partition.
-						if keyrec, err := app.keyMap.GetKey(rec.Key); err != nil {
+						if keyrec, err := app.backupKeyMap.GetKey(rec.Key); err != nil { // Get information from backup key map.
 							p := app.MapToPartition(rec) // Get a mapping to a partition.
 							// Lock the partition weights and update.
 							app.Lock()
@@ -130,7 +130,8 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 							app.Unlock()
 
 							// Add the new mapping.
-							app.keyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
+							// app.keyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
+							app.backupKeyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p}) // Add new partition mapping to backupkeymap
 						} else { // Mapping already exists.
 							// Check if weight change is over threshold.
 							oldWeight := float64(keyrec.Count) / float64(app.conf.FreqThreshold)
@@ -153,7 +154,7 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 								app.partitionWeights[p] += weight
 								app.Unlock()
 								// Add the new mapping.
-								app.keyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
+								app.backupKeyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p})
 							}
 						}
 					}
@@ -161,7 +162,7 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 					// Mark for deletion but do not delete this here.
 					// This will be deleted next time when the `message` function sends a message for this key.
 					// This allows the `message` function to send an update message to both old and new partitions.
-					app.keyMap.MarkForDeletion(rec.Key)
+					app.backupKeyMap.MarkForDeletion(rec.Key)
 				}
 			}
 			// Increment bucket.
@@ -187,6 +188,7 @@ func checkKeyList(key string, items *[]Record) (int, bool) {
 	return -1, false
 }
 
+// Create Mapping to partition for a new hot key.
 func (app *Application) MapToPartition(rec Record) int32 {
 	if app.p2c {
 		rand.Seed(time.Now().UnixNano())

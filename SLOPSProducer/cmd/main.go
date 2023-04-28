@@ -65,10 +65,12 @@ func main() {
 		ch:               make(chan string),
 		conf:             conf,
 		keyMap:           &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
+		backupKeyMap:     &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
 		messageSets:      &MessageSetMap{KV: map[string]MessageSet{}},
 		partitionWeights: make([]float64, conf.Partitions),
 		// randomPartitioner: internal.NewRandomPartitioner(),
-		logger: log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
+		logger:       log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
+		mapSwapTimer: *time.NewTicker(time.Duration(conf.SwapInterval) * time.Second),
 	}
 
 	// Start the lossy count thread.
@@ -111,6 +113,10 @@ func main() {
 			errors++
 		}
 	}(waitGroup)
+
+	// Start the map swap routine.
+	waitGroup.Add(1)
+	go app.SwapMaps()
 
 	// HTTP Server.
 	srv := http.Server{

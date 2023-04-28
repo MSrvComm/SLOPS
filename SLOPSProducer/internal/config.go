@@ -14,6 +14,7 @@ type Config struct {
 	Partitions         int32   `yaml:"partitions"`
 	GRPCPort           int     `yaml:"grpc_port"`
 	HTTPPort           int     `yaml:"http_port"`
+	SwapInterval       int     `yaml:"swap_interval"`
 }
 
 func (c *Config) Parse(data []byte) error {
