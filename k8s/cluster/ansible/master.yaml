@@ -1,0 +1,46 @@
+- hosts: masters
+  remote_user: kube
+  become: yes
+  become_method: sudo
+  become_user: root
+  gather_facts: yes
+  connection: ssh
+  
+  tasks:
+    - name: init the cluster
+      shell: sudo kubeadm init --pod-network-cidr 10.244.0.0/16 --apiserver-advertise-address 10.10.1.1
+
+    - name: create .kube folder
+      file:
+        path: $HOME/.kube
+        state: directory
+        mode: 0755
+
+    - name: copies admin.conf to user's kube config
+      file:
+        path: /etc/kubernetes/admin.conf
+        dest: $HOME/.kube/config
+        # remote_src: yes
+
+    - name: install Pod network
+      become: yes
+      become_user: kube
+      shell: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml 
+      args:
+        chdir: $HOME
+
+    - name: change default interface
+      shell: kubectl set env daemonset/calico-node -n calico-system IP_AUTODETECTION_METHOD=interface=ens1f0
+
+    - name: Get the token for joining the worker nodes
+      become: yes
+      become_user: kube
+      shell: kubeadm token create  --print-join-command
+      register: kubernetes_join_command
+
+    - name: debug
+      debug: "{{ kubernetes_join_command.stdout }}"
+
+    - name: Copy join command to local file.
+      become: yes
+      local_action: copy content="{{ kubernetes_join_command.stdout_lines[0] }}" dest="/tmp/kubernetes_join_command" mode=0777

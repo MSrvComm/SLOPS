@@ -1,0 +1,70 @@
+---
+# https://buildvirtual.net/deploy-a-kubernetes-cluster-using-ansible/
+- hosts: "workers, masters"
+  remote_user: kube
+  become: yes
+  become_method: sudo
+  become_user: root
+  gather_facts: yes
+  connection: ssh
+
+  tasks:
+    - name: disable swap
+      shell: |
+        sudo swapoff -a
+        sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+    - name: install containerd
+      shell: |
+        sudo apt install -y ca-certificates curl gnupg lsb-release
+        sudo mkdir -p /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt remove -y containerd
+        sudo apt update
+        sudo apt install -y containerd.io
+        sudo rm /etc/containerd/config.toml
+        sudo systemctl restart containerd
+        sudo apt install -y docker-ce
+
+    - name: move docker
+      shell: |
+        sudo systemctl stop docker
+        sudo mv /var/lib/docker /mydata
+        sudo ln -s /mydata/docker /var/lib/docker
+        sudo systemctl start docker
+
+    - name: containerd settings
+      blockinfile:
+        path: /etc/docker/daemon.json
+        block: |
+          {
+            "exec-opts": ["native.cgroupdriver=systemd"],
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "100m"
+            },
+            "storage-driver": "overlay2"
+          }
+
+    - name: install and configure dependencies
+      shell: |
+        sudo apt-get update && sudo apt-get install -y apt-transport-https curl
+        curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+    - name: Create kubernetes repo file
+      file:
+        path: "/etc/apt/sources.list.d/kubernetes.list"
+        state: touch
+
+    - name: Add K8s source
+      blockinfile:
+        path: /etc/apt/sources.list.d/kubernetes.list
+        block: |
+          deb https://apt.kubernetes.io/ kubernetes-xenial main
+
+    - name: install K8s
+      shell: |
+        sudo apt update
+        sudo apt install -y kubelet kubeadm kubectl nftables
+        sudo apt-mark hold kubelet kubeadm kubectl
