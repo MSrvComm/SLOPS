@@ -54,16 +54,12 @@ func main() {
 		log.Fatal("P2C val not correct:", err)
 	}
 
-	lossy, err := strconv.ParseBool(os.Getenv("LOSSY"))
-	if err != nil {
-		log.Fatal("lossy val not correct:", err)
-	}
-
 	app := Application{
-		vanilla:          vanilla,
-		p2c:              p2c,
-		ch:               make(chan string),
-		conf:             conf,
+		vanilla: vanilla,
+		p2c:     p2c,
+		ch:      make(chan string),
+		conf:    conf,
+		// partitionMap:     &internal.PartitionMap{Keys: map[string]uint32{}},
 		keyMap:           &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
 		backupKeyMap:     &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
 		messageSets:      &MessageSetMap{KV: map[string]MessageSet{}},
@@ -73,14 +69,15 @@ func main() {
 		mapSwapTimer: *time.NewTicker(time.Duration(conf.SwapInterval) * time.Second),
 	}
 
+	// Populate the partitions in the partition map.
+	for p := int32(0); p < app.conf.Partitions; p++ {
+		app.partitionMap.KV[p] = []internal.KeyCount{}
+	}
+
 	// Start the lossy count thread.
 	if !app.vanilla {
 		waitGroup.Add(1)
-		if lossy {
-			go app.LossyCount(waitGroup)
-		} else {
-			go app.ExactCount(waitGroup)
-		}
+		go app.LossyCount(waitGroup)
 	}
 
 	// Start Kafka producer.
