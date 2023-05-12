@@ -49,7 +49,7 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 						weight := float64(rec.Count) / float64(app.conf.FreqThreshold)
 						// If a new hot key is detected, add it to a partition.
 						if _, err := app.backupKeyMap.GetKey(rec.Key); err != nil { // Get information from backup key map.
-							p := app.MapToPartition(rec) // Get a mapping to a partition.
+							p := app.MapToPartition() // Get a mapping to a partition.
 							// Lock the partition weights and update.
 							app.Lock()
 							app.partitionWeights[p] += weight
@@ -66,6 +66,7 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 					// This will be deleted next time when the `message` function sends a message for this key.
 					// This allows the `message` function to send an update message to both old and new partitions.
 					app.backupKeyMap.MarkForDeletion(rec.Key)
+					app.partitionMap.DelHotKey(rec.Key) // We can delete it from the partition mapping.
 				}
 			}
 			// Increment bucket
@@ -94,7 +95,7 @@ func checkKeyList(key string, items *[]Record) (int, bool) {
 // Check curre
 
 // Create Mapping to partition for a new hot key.
-func (app *Application) MapToPartition(rec Record) int32 {
+func (app *Application) MapToPartition() int32 {
 	if app.p2c {
 		rand.Seed(time.Now().UnixNano())
 		p1 := rand.Int31n(app.conf.Partitions)
@@ -118,6 +119,3 @@ func (app *Application) MapToPartition(rec Record) int32 {
 	}
 }
 
-func (app *Application) rebalancePartitions() {
-	// TODO: Call app.partitionMap.rebalance()
-}

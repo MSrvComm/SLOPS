@@ -28,10 +28,26 @@ type Application struct {
 
 // Swap the map every interval set in the ticker.
 func (app *Application) SwapMaps() {
-	// TODO: Before swapping the maps
-	// rebalance the partitions.
-	// call rebalancePartitions().
 	for range app.mapSwapTimer.C { // Swap the structs.
+		// TODO: Before swapping the maps
+		// rebalance the partitions.
+		keysMoved, err := app.partitionMap.Rebalance()
+		if err == nil || len(keysMoved) != 0 {
+			// Change the key to partition mappings as well.
+			for _, keyS := range keysMoved {
+				weight := float64(keyS.Count) / float64(app.conf.FreqThreshold)
+				// Remove the flow from the old partition.
+				app.Lock()
+				app.partitionWeights[keyS.SourcePartition] -= weight
+				app.Unlock()
+				// Map it to a new partition.
+				app.Lock()
+				app.partitionWeights[keyS.TargetPartition] += weight
+				app.Unlock()
+				// Add the new mapping.
+				app.backupKeyMap.AddKey(internal.KeyRecord{Key: keyS.Key, Count: keyS.Count, Partition: keyS.TargetPartition})
+			}
+		}
 		log.Println("Swapping the maps")
 		newMap := make(map[string]internal.KeyRecord)
 		for k, v := range app.backupKeyMap.KV {
