@@ -100,15 +100,20 @@ func (p *PartitionMap) systemWtAvg() (float64, error) {
 
 // Get the difference in the partition weight and the system weight
 func (p *PartitionMap) getWtDiff(partition int32) (float64, error) {
-	pWtAvg, err := p.partitionWtAvg(partition)
-	if err != nil {
-		return 0, err
+	// pWtAvg, err := p.partitionWtAvg(partition)
+	// if err != nil {
+	// 	return 0, err
+	// }
+	partitionTotalWt := 0
+	for _, kc := range p.KV[partition] {
+		partitionTotalWt += kc.Count
 	}
 	sysWtAvg, err := p.systemWtAvg()
 	if err != nil {
 		return 0, err
 	}
-	return pWtAvg - sysWtAvg, nil
+	// return pWtAvg - sysWtAvg, nil
+	return float64(partitionTotalWt) - sysWtAvg, nil
 }
 
 // Key set from an heavier than avg partition that needs to be moved.
@@ -196,12 +201,14 @@ func (p *PartitionMap) Rebalance() ([]struct {
 	SourcePartition int32
 	TargetPartition int32
 	Count           int
+	SysWt           float64 // exists to check behavior
 }, error) {
 	var keysMoved []struct {
 		Key             string
 		SourcePartition int32
 		TargetPartition int32
 		Count           int
+		SysWt           float64 // exists to check behavior
 	}
 	// 1. Get the partition sets - getPartitionSets.
 	lessThanAvgWtPartitions, grtrThanAvgWtPartitions, err := p.getPartitionSets()
@@ -211,6 +218,7 @@ func (p *PartitionMap) Rebalance() ([]struct {
 			SourcePartition int32
 			TargetPartition int32
 			Count           int
+			SysWt           float64 // exists to check behavior
 		}{}, err
 	}
 	// 2. Walk through the greater than partitions.
@@ -220,6 +228,18 @@ func (p *PartitionMap) Rebalance() ([]struct {
 		keySet, err := p.keySet2Move(partition)
 		if err != nil {
 			continue
+		}
+
+		// exists to check behavior
+		wtDiff, err := p.getWtDiff(partition)
+		if err != nil {
+			return []struct {
+				Key             string
+				SourcePartition int32
+				TargetPartition int32
+				Count           int
+				SysWt           float64 // exists to check behavior
+			}{}, err
 		}
 
 		// 4. For each key in keySet2Move
@@ -250,7 +270,8 @@ func (p *PartitionMap) Rebalance() ([]struct {
 				SourcePartition int32
 				TargetPartition int32
 				Count           int
-			}{key.key, partition, targetPartition, key.wt})
+				SysWt           float64 // exists to check behavior
+			}{key.key, partition, targetPartition, key.wt, wtDiff})
 		}
 	}
 	return keysMoved, nil

@@ -29,7 +29,7 @@ type Application struct {
 // Swap the map every interval set in the ticker.
 func (app *Application) SwapMaps() {
 	for range app.mapSwapTimer.C { // Swap the structs.
-		// TODO: Before swapping the maps
+		// Before swapping the maps
 		// rebalance the partitions.
 		keysMoved, err := app.partitionMap.Rebalance()
 		if err == nil || len(keysMoved) != 0 {
@@ -54,5 +54,28 @@ func (app *Application) SwapMaps() {
 			newMap[k] = v
 		}
 		app.keyMap.KV = newMap
+
+		go app.debugPrint(keysMoved) // // exists to check behavior
+	}
+}
+
+// exists to check behavior
+func (app *Application) debugPrint(entries []struct {
+	Key             string
+	SourcePartition int32
+	TargetPartition int32
+	Count           int
+	SysWt           float64 // exists to check behavior
+}) {
+	// var partitionAvgWtMap map[int32]float64
+	// var partitionKeySetMap map[int32][]int
+
+	for _, entry := range entries {
+		// partition := entry.SourcePartition
+		// partitionAvgWtMap[partition] = entry.SysWt
+		// partitionKeySetMap[partition] = append(partitionKeySetMap[partition], entry.Count)
+		if float64(entry.Count) > entry.SysWt {
+			log.Printf("beahvior error: Partition %d with partition weight %f moved a flow with weight %d\n", entry.SourcePartition, entry.SysWt, entry.Count)
+		}
 	}
 }
