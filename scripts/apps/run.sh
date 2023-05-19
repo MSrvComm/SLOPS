@@ -9,7 +9,7 @@ then
 fi
 
 rate=${rate:-1500}
-iter=${iter:-90000}
+iter=${iter:-450000} # 5 minutes
 keys=${keys:-28000000}
 
 while [ $# -gt 0 ]; do
