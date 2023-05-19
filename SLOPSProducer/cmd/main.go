@@ -75,11 +75,11 @@ func main() {
 		app.partitionMap.KV[p] = []internal.KeyCount{}
 	}
 
-	// Start the lossy count thread.
-	if !app.vanilla {
-		waitGroup.Add(1)
-		go app.LossyCount(waitGroup)
-	}
+	// // Start the lossy count thread.
+	// if !app.vanilla {
+	// 	waitGroup.Add(1)
+	// 	go app.LossyCount(waitGroup)
+	// }
 
 	// Start Kafka producer.
 	app.producer = app.NewProducer()
@@ -113,8 +113,11 @@ func main() {
 	}(waitGroup)
 
 	// Start the map swap routine.
-	waitGroup.Add(1)
-	go app.SwapMaps()
+	if !app.vanilla {
+		waitGroup.Add(2)
+		go app.SwapMaps()
+		go app.LossyCount(waitGroup)
+	}
 
 	// HTTP Server.
 	srv := http.Server{
