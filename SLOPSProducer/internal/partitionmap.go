@@ -3,6 +3,7 @@ package internal
 import (
 	"errors"
 	"math"
+	"sort"
 	"sync"
 )
 
@@ -18,7 +19,8 @@ type PartitionMap struct {
 	// Each element of the array is the hot key mapped to that partition
 	// And the count associated with that hot key.
 	// So an array of KeyCount structs.
-	KV map[int32][]KeyCount
+	KV           map[int32][]KeyCount
+	RebalanceMap map[int32][]KeyCount // This map is used as a static copy during rebalance.
 }
 
 // Add or update a hot key to partition map.
@@ -68,44 +70,45 @@ func (p *PartitionMap) DelHotKey(key string) {
 
 // Avg weight on the partition.
 // weight = size of key (frequence of incoming messages)
-func (p *PartitionMap) partitionWtAvg(partition int32) (float64, error) {
+func (p *PartitionMap) getPartitionWt(partition int32) float64 {
 	pTotalWt := 0
 
-	for _, kc := range p.KV[partition] {
+	for _, kc := range p.RebalanceMap[partition] {
 		pTotalWt += kc.Count
 	}
-	if len(p.KV[partition]) > 0 {
-		return float64(pTotalWt) / float64(len(p.KV[partition])), nil
-	}
-	return 0, errors.New("no key on partition")
+	// if len(p.KV[partition]) > 0 {
+	// 	return float64(pTotalWt) / float64(len(p.KV[partition])), nil
+	// }
+	// return 0, errors.New("no key on partition")
+	return float64(pTotalWt)
 }
 
 // Avg weight across the gateway.
 func (p *PartitionMap) systemWtAvg() (float64, error) {
 	sysTotalWt := int(0)
-	var partitionWts []int
-	for partition := range p.KV {
+	var partitions int
+	for partition := range p.RebalanceMap {
 		partitionWt := 0
-		for _, kc := range p.KV[partition] {
+		for _, kc := range p.RebalanceMap[partition] {
 			sysTotalWt += kc.Count
 			partitionWt += kc.Count
 		}
-		partitionWts = append(partitionWts, partitionWt)
+		partitions++
 	}
-	if len(partitionWts) == 0 {
+	if partitions == 0 {
 		return 0, errors.New("no hot key on the system")
 	}
-	return float64(sysTotalWt) / float64(len(partitionWts)), nil
+	return float64(sysTotalWt) / float64(partitions), nil
 }
 
 // Get the difference in the partition weight and the system weight
 func (p *PartitionMap) getWtDiff(partition int32) (float64, error) {
-	// pWtAvg, err := p.partitionWtAvg(partition)
+	// pWtAvg, err := p.getPartitionWt(partition)
 	// if err != nil {
 	// 	return 0, err
 	// }
 	partitionTotalWt := 0
-	for _, kc := range p.KV[partition] {
+	for _, kc := range p.RebalanceMap[partition] {
 		partitionTotalWt += kc.Count
 	}
 	sysWtAvg, err := p.systemWtAvg()
@@ -134,7 +137,7 @@ func (p *PartitionMap) keySet2Move(partition int32) ([]struct {
 		wt  int
 	}
 
-	for _, kc := range p.KV[partition] {
+	for _, kc := range p.RebalanceMap[partition] {
 		if float64(kc.Count) <= wtDiff {
 			keySet = append(keySet, struct {
 				key string
@@ -142,6 +145,10 @@ func (p *PartitionMap) keySet2Move(partition int32) ([]struct {
 			}{kc.Key, kc.Count})
 		}
 	}
+	// Sort the keys
+	sort.Slice(keySet, func(i, j int) bool {
+		return keySet[i].wt < keySet[j].wt
+	})
 	return keySet, nil
 }
 
@@ -156,20 +163,49 @@ func (p *PartitionMap) getPartitionSets() ([]int32, []int32, error) {
 	var lessThanAvgWtPartitions []int32
 	var grtrThanAvgWtPartitions []int32
 
-	for partition := range p.KV {
-		pWtAvg, err := p.partitionWtAvg(partition)
-		if err != nil {
-			lessThanAvgWtPartitions = append(lessThanAvgWtPartitions, partition)
-			continue
-		}
+	for partition := range p.RebalanceMap {
+		// pWtAvg, err := p.partitionWt(partition)
+		// if err != nil {
+		// 	lessThanAvgWtPartitions = append(lessThanAvgWtPartitions, partition)
+		// 	continue
+		// }
 
-		if sysWtAvg > pWtAvg {
+		partitionWt := p.getPartitionWt(partition)
+
+		if sysWtAvg > partitionWt {
 			lessThanAvgWtPartitions = append(lessThanAvgWtPartitions, partition)
-		} else if sysWtAvg < pWtAvg {
+		} else if sysWtAvg < partitionWt {
 			grtrThanAvgWtPartitions = append(grtrThanAvgWtPartitions, partition)
 		}
 	}
 	return lessThanAvgWtPartitions, grtrThanAvgWtPartitions, nil
+}
+
+// TODO: When to not migrate a key?
+// If for all partitions, migrating the key makes the
+// partition's total size greater than the source partition's size.
+func (p *PartitionMap) checkBestFit2(count, partition int32) int32 {
+	targetPartition := int32(-1)
+	var delta float64
+	for prtn := range p.RebalanceMap {
+		if prtn == partition {
+			continue
+		}
+		targetWt := p.getPartitionWt(prtn)
+		srcWt := p.getPartitionWt(partition)
+		if srcWt < targetWt {
+			continue
+		}
+		// target partition is not set.
+		// or the difference between the the two partitions
+		// is the lowest after migrating the hot key.
+		curDelta := math.Abs((srcWt - float64(count)) - (targetWt + float64(count)))
+		if targetPartition == -1 || curDelta < delta {
+			delta = curDelta
+			targetPartition = prtn
+		}
+	}
+	return targetPartition
 }
 
 // Check which partition a hot key with weight "count" would best fit into.
@@ -185,12 +221,13 @@ func (p *PartitionMap) checkBestFit(count, partition int32, lessThanAvgWtPartiti
 		}
 		// Find a target partition with the smallest deviation from the system avg.
 		// If targetPartition == - 1, then we have not set any target yet.
-		if targetPartition == -1 || float64(count) < wtDiff {
-			if math.Abs(wtDiff-float64(count)) < delta {
-				delta = math.Abs(wtDiff - float64(count))
-				targetPartition = prtn
-			}
+		// if targetPartition == -1 || float64(count) < wtDiff {
+		if math.Abs(wtDiff+float64(count)) < delta {
+			// delta = math.Abs(wtDiff - float64(count))
+			delta = math.Abs(wtDiff + float64(count))
+			targetPartition = prtn
 		}
+		// }
 	}
 
 	return targetPartition
@@ -203,6 +240,12 @@ func (p *PartitionMap) Rebalance() ([]struct {
 	Count           int
 	SysWt           float64 // exists to check behavior
 }, error) {
+	// make a static copy of the map.
+	for prtn, kcArr := range p.KV {
+		p.RebalanceMap[prtn] = make([]KeyCount, len(kcArr))
+		copy(kcArr, p.RebalanceMap[prtn])
+	}
+
 	var keysMoved []struct {
 		Key             string
 		SourcePartition int32
@@ -210,8 +253,20 @@ func (p *PartitionMap) Rebalance() ([]struct {
 		Count           int
 		SysWt           float64 // exists to check behavior
 	}
+	// System Avg weight
+	sysAvgWt, err := p.systemWtAvg()
+	if err != nil {
+		return []struct {
+			Key             string
+			SourcePartition int32
+			TargetPartition int32
+			Count           int
+			SysWt           float64 // exists to check behavior
+		}{}, err
+	}
 	// 1. Get the partition sets - getPartitionSets.
-	lessThanAvgWtPartitions, grtrThanAvgWtPartitions, err := p.getPartitionSets()
+	// lessThanAvgWtPartitions, grtrThanAvgWtPartitions, err := p.getPartitionSets()
+	_, grtrThanAvgWtPartitions, err := p.getPartitionSets()
 	if err != nil {
 		return []struct {
 			Key             string
@@ -246,15 +301,9 @@ func (p *PartitionMap) Rebalance() ([]struct {
 		for _, key := range keySet {
 			// Check if it can be accomodated in one of the
 			// lesser than partitions -> checkBestFit
-			targetPartition := p.checkBestFit(int32(key.wt), partition, lessThanAvgWtPartitions)
-			// As we move hot keys away from an overloaded partition,
-			// it may eventually become the best target partition for the next keys.
-			if targetPartition == partition {
-				// Not overloaded anymore
-				// Break out of the keySet loop.
-				// And look at the next partition.
-				break
-			}
+			// targetPartition := p.checkBestFit(int32(key.wt), partition, lessThanAvgWtPartitions)
+			targetPartition := p.checkBestFit2(int32(key.wt), partition)
+			// targetPartition := p.checkBestFit2(int32(key.wt), partition)
 			// No good partition was found.
 			if targetPartition == -1 {
 				continue
@@ -272,6 +321,13 @@ func (p *PartitionMap) Rebalance() ([]struct {
 				Count           int
 				SysWt           float64 // exists to check behavior
 			}{key.key, partition, targetPartition, key.wt, wtDiff})
+
+			// Check if partition total weight is going to fall below
+			// system avg weight if this key is moved.
+			// That means we have already moved enough keys from this partition.
+			if p.getPartitionWt(partition) <= sysAvgWt {
+				break
+			}
 		}
 	}
 	return keysMoved, nil

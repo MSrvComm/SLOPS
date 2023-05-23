@@ -70,7 +70,7 @@ func main() {
 	}
 
 	// Populate the partitions in the partition map.
-	app.partitionMap = &internal.PartitionMap{KV: map[int32][]internal.KeyCount{}}
+	app.partitionMap = &internal.PartitionMap{KV: map[int32][]internal.KeyCount{}, RebalanceMap: map[int32][]internal.KeyCount{}}
 	for p := int32(0); p < app.conf.Partitions; p++ {
 		app.partitionMap.KV[p] = []internal.KeyCount{}
 	}
