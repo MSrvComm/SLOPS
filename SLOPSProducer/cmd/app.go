@@ -39,16 +39,14 @@ func (app *Application) SwapMaps() {
 				// Remove the flow from the old partition.
 				app.Lock()
 				app.partitionWeights[keyS.SourcePartition] -= weight
-				app.Unlock()
 				// Map it to a new partition.
-				app.Lock()
 				app.partitionWeights[keyS.TargetPartition] += weight
 				app.Unlock()
 				// Add the new mapping.
 				app.backupKeyMap.AddKey(internal.KeyRecord{Key: keyS.Key, Count: keyS.Count, Partition: keyS.TargetPartition})
 			}
 		}
-		log.Println("Swapping the maps")
+		log.Println("Swapping the maps: Version: 05-22-2023:15-32")
 		newMap := make(map[string]internal.KeyRecord)
 		for k, v := range app.backupKeyMap.KV {
 			newMap[k] = v
