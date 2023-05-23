@@ -8,8 +8,8 @@ then
     BASEDIR+="/.."
 fi
 
-rate=${rate:-1500}
-iter=${iter:-90000}
+rate=${rate:-1000}
+iter=${iter:-300000} # 5 minutes
 keys=${keys:-28000000}
 
 while [ $# -gt 0 ]; do

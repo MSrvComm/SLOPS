@@ -1,0 +1,5 @@
+[masters]
+node0 ansible_hosts=10.10.1.1 ansible_user=root
+
+[workers]
+node1 ansible_hosts=10.10.1.2 ansible_user=root
