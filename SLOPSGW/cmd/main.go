@@ -57,7 +57,7 @@ type Endpoints struct {
 
 func main() {
 	router := gin.Default()
-	router.GET("/", routeMsg)
+	router.GET("/new", routeMsg)
 
 	logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile)
 
