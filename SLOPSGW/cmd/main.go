@@ -19,7 +19,7 @@ import (
 
 const (
 	SVC_NAME = "producer"
-	SVC_URL  = "http://slops-controller:2048/"
+	SVC_URL  = "http://slops-controller:62000/"
 )
 
 var (
