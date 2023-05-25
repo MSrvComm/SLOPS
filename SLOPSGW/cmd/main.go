@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,10 +22,10 @@ const (
 )
 
 var (
-	epIPs       []string
-	key2EpMap   map[string][]string
-	logger      *log.Logger
-	lastEpIndex int
+	epIPs      []string
+	key2EpMap  map[string][]string
+	logger     *log.Logger
+	curEpIndex = 0
 )
 
 func searchKeyInMap(targetKey string) string {
@@ -56,52 +55,70 @@ type Endpoints struct {
 }
 
 func main() {
-	router := gin.Default()
-	router.GET("/new", routeMsg)
-
 	logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile)
 
-	wg := sync.WaitGroup{}
-
-	epChannel := make(chan *Endpoints)
-
-	// Go away and check for endpoints.
-	wg.Add(1)
-	go func(epChannel chan *Endpoints, wg *sync.WaitGroup) {
-		defer wg.Done()
-		// Get the IPs for the very first time.
-		epChannel <- getEndpoints()
-
-		// Check every 10 seconds if the endpoints have changed.
-		ticker := time.NewTicker(time.Second * 10)
-		for range ticker.C {
-			epChannel <- getEndpoints()
-		}
-
-	}(epChannel, &wg)
+	// wg := sync.WaitGroup{}
 
 	key2EpMap = map[string][]string{}
+	epIPs = getEndpoints().Ips
+	for _, ep := range epIPs {
+		key2EpMap[ep] = []string{}
+	}
+	logger.Println("Endpoints established:", epIPs) // Debug
 
-	// Go away and keep updating the endpoints.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		endpoints := <-epChannel
-		epIPs = endpoints.Ips
-		// This would clean up the map and lead to bad behavior
-		// but we ignore that since this part is not changing in our experiments.
-		for _, ep := range endpoints.Ips {
-			key2EpMap[ep] = []string{}
-		}
-	}()
+	// // Go away and check for endpoints.
+	// epChannel := make(chan *Endpoints)
+	// wg.Add(1)
+	// go func(epChannel chan *Endpoints, wg *sync.WaitGroup) {
+	// 	defer wg.Done()
+	// 	// Get the IPs for the very first time.
+	// 	epChannel <- getEndpoints()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		router.Run("localhost:9090")
-	}()
+	// 	// Check every 10 seconds if the endpoints have changed.
+	// 	ticker := time.NewTicker(time.Second * 10)
+	// 	for range ticker.C {
+	// 		epChannel <- getEndpoints()
+	// 	}
 
-	wg.Wait()
+	// }(epChannel, &wg)
+
+	// // Go away and keep updating the endpoints.
+	// wg.Add(1)
+	// go func() {
+	// 	defer wg.Done()
+	// 	endpoints := <-epChannel
+	// 	epIPs = endpoints.Ips
+	// 	// This would clean up the map and lead to bad behavior
+	// 	// but we ignore that since this part is not changing in our experiments.
+	// 	for _, ep := range endpoints.Ips {
+	// 		key2EpMap[ep] = []string{}
+	// 	}
+	// }()
+
+	srv := http.Server{
+		Addr:         ":9090",
+		Handler:      routes(),
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	}
+
+	logger.Printf("Starting HTTP server on %s", srv.Addr)
+	logger.Fatal(srv.ListenAndServe())
+
+	// wg.Wait()
+}
+
+func routes() *gin.Engine {
+	router := gin.Default()
+
+	router.NoRoute(notFoundResponse)
+	router.NoMethod(methodNotAllowedResponse)
+	router.HandleMethodNotAllowed = true
+
+	router.POST("/new", routeMsg)
+
+	return router
 }
 
 func routeMsg(c *gin.Context) {
@@ -117,12 +134,13 @@ func routeMsg(c *gin.Context) {
 
 	ip := searchKeyInMap(input.Key)
 	if ip == "nil" {
-		lastEpIndex++
-		if lastEpIndex >= len(epIPs) {
-			lastEpIndex = 0
+		if curEpIndex >= len(epIPs) {
+			curEpIndex = 0
 		}
-		ip = epIPs[lastEpIndex]
+		log.Printf("Number of servers %d, current index %d\n", len(epIPs), curEpIndex)
+		ip = epIPs[curEpIndex]
 		insertKeyInMap(input.Key, ip)
+		curEpIndex++
 	}
 
 	url := fmt.Sprintf("http://%s:2048/new", ip)
@@ -157,7 +175,22 @@ func getEndpoints() *Endpoints {
 		logger.Println("Error json unmarshalling:", err)
 		return nil
 	}
+	logger.Println("Endpoints:", ep)
 	return &ep
+}
+
+// The notFoundResponse() method will be used to send a 404 Not Found status code and
+// JSON response to the client.
+func notFoundResponse(c *gin.Context) {
+	message := "the requested resource could not be found"
+	errorResponse(c, http.StatusNotFound, message)
+}
+
+// The methodNotAllowedResponse() method will be used to send a 405 Method Not Allowed
+// status code and JSON response to the client.
+func methodNotAllowedResponse(c *gin.Context) {
+	message := fmt.Sprintf("the %s method is not supported for this resource", c.Request.Method)
+	errorResponse(c, http.StatusMethodNotAllowed, message)
 }
 
 func badRequestResponse(c *gin.Context, err error) {
