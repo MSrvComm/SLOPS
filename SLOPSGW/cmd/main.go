@@ -19,7 +19,7 @@ import (
 
 const (
 	SVC_NAME = "producer"
-	SVC_URL  = "http://slops-controller:30000/"
+	SVC_URL  = "http://slops-controller:2048/"
 )
 
 var (
@@ -141,7 +141,7 @@ func getEndpoints() *Endpoints {
 	resp, err := http.Get(SVC_URL + SVC_NAME)
 	if err != nil {
 		logger.Println("Error get request:", err)
-
+		return nil
 	}
 	defer resp.Body.Close()
 
