@@ -29,44 +29,23 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// var updateUnit time.Duration
-	// if conf.UpdateIntervalUnit == "second" {
-	// 	updateUnit = time.Second
-	// } else if conf.UpdateIntervalUnit == "minute" {
-	// 	updateUnit = time.Minute
-	// } else {
-	// 	log.Fatal("can only accept 'second' or 'minute' for interval unit.")
-	// }
-
-	// selfIP := os.Getenv("ADDRESS")
-	// if selfIP == "" {
-	// 	log.Fatal("not a valid IP")
-	// }
-
 	waitGroup := &sync.WaitGroup{}
 
 	vanilla, err := strconv.ParseBool(os.Getenv("VANILLA"))
 	if err != nil {
 		log.Fatal("Vanilla val not correct:", err)
 	}
-	p2c, err := strconv.ParseBool(os.Getenv("P2C"))
-	if err != nil {
-		log.Fatal("P2C val not correct:", err)
-	}
 
 	app := Application{
-		vanilla: vanilla,
-		p2c:     p2c,
-		ch:      make(chan string),
-		conf:    conf,
-		// partitionMap:     &internal.PartitionMap{Keys: map[string]uint32{}},
+		vanilla:          vanilla,
+		ch:               make(chan string),
+		conf:             conf,
 		keyMap:           &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
 		backupKeyMap:     &internal.KeyMap{KV: make(map[string]internal.KeyRecord)},
 		messageSets:      &MessageSetMap{KV: map[string]MessageSet{}},
 		partitionWeights: make([]float64, conf.Partitions),
-		// randomPartitioner: internal.NewRandomPartitioner(),
-		logger:       log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
-		mapSwapTimer: *time.NewTicker(time.Duration(conf.SwapInterval) * time.Second),
+		logger:           log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
+		mapSwapTimer:     *time.NewTicker(time.Duration(conf.SwapInterval) * time.Second),
 	}
 
 	// Populate the partitions in the partition map.
@@ -74,12 +53,6 @@ func main() {
 	for p := int32(0); p < app.conf.Partitions; p++ {
 		app.partitionMap.KV[p] = []internal.KeyCount{}
 	}
-
-	// // Start the lossy count thread.
-	// if !app.vanilla {
-	// 	waitGroup.Add(1)
-	// 	go app.LossyCount(waitGroup)
-	// }
 
 	// Start Kafka producer.
 	app.producer = app.NewProducer()

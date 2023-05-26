@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,7 +58,7 @@ type Endpoints struct {
 func main() {
 	logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile)
 
-	// wg := sync.WaitGroup{}
+	wg := sync.WaitGroup{}
 
 	key2EpMap = map[string][]string{}
 	epIPs = getEndpoints().Ips
@@ -66,34 +67,34 @@ func main() {
 	}
 	logger.Println("Endpoints established:", epIPs) // Debug
 
-	// // Go away and check for endpoints.
-	// epChannel := make(chan *Endpoints)
-	// wg.Add(1)
-	// go func(epChannel chan *Endpoints, wg *sync.WaitGroup) {
-	// 	defer wg.Done()
-	// 	// Get the IPs for the very first time.
-	// 	epChannel <- getEndpoints()
+	// Go away and check for endpoints.
+	epChannel := make(chan *Endpoints)
+	wg.Add(1)
+	go func(epChannel chan *Endpoints, wg *sync.WaitGroup) {
+		defer wg.Done()
+		// Get the IPs for the very first time.
+		epChannel <- getEndpoints()
 
-	// 	// Check every 10 seconds if the endpoints have changed.
-	// 	ticker := time.NewTicker(time.Second * 10)
-	// 	for range ticker.C {
-	// 		epChannel <- getEndpoints()
-	// 	}
+		// Check every 10 seconds if the endpoints have changed.
+		ticker := time.NewTicker(time.Second * 10)
+		for range ticker.C {
+			epChannel <- getEndpoints()
+		}
 
-	// }(epChannel, &wg)
+	}(epChannel, &wg)
 
-	// // Go away and keep updating the endpoints.
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	endpoints := <-epChannel
-	// 	epIPs = endpoints.Ips
-	// 	// This would clean up the map and lead to bad behavior
-	// 	// but we ignore that since this part is not changing in our experiments.
-	// 	for _, ep := range endpoints.Ips {
-	// 		key2EpMap[ep] = []string{}
-	// 	}
-	// }()
+	// Go away and keep updating the endpoints.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		endpoints := <-epChannel
+		epIPs = endpoints.Ips
+		// This would clean up the map and lead to bad behavior
+		// but we ignore that since this part is not changing in our experiments.
+		for _, ep := range endpoints.Ips {
+			key2EpMap[ep] = []string{}
+		}
+	}()
 
 	srv := http.Server{
 		Addr:         ":9090",
@@ -137,10 +138,12 @@ func routeMsg(c *gin.Context) {
 		if curEpIndex >= len(epIPs) {
 			curEpIndex = 0
 		}
-		log.Printf("Number of servers %d, current index %d\n", len(epIPs), curEpIndex)
+		logger.Printf("Number of servers %d, current index %d\n", len(epIPs), curEpIndex)
 		ip = epIPs[curEpIndex]
 		insertKeyInMap(input.Key, ip)
 		curEpIndex++
+	} else {
+		logger.Println("Key found")
 	}
 
 	url := fmt.Sprintf("http://%s:2048/new", ip)

@@ -96,26 +96,25 @@ func checkKeyList(key string, items *[]Record) (int, bool) {
 
 // Create Mapping to partition for a new hot key.
 func (app *Application) MapToPartition() int32 {
-	if app.p2c {
-		rand.Seed(time.Now().UnixNano())
-		p1 := rand.Int31n(app.conf.Partitions)
-		p2 := rand.Int31n(app.conf.Partitions)
+	// if app.p2c {
+	rand.Seed(time.Now().UnixNano())
+	p1 := rand.Int31n(app.conf.Partitions)
+	p2 := rand.Int31n(app.conf.Partitions)
 
-		v1 := app.partitionWeights[p1]
-		v2 := app.partitionWeights[p2]
+	v1 := app.partitionWeights[p1]
+	v2 := app.partitionWeights[p2]
 
-		if v1 > v2 {
-			return p2
-		}
-		return p1
-	} else {
-		part := int32(0)
-		for p := int32(1); p < app.conf.Partitions; p++ {
-			if app.partitionWeights[part] > app.partitionWeights[p] {
-				part = p
-			}
-		}
-		return part
+	if v1 > v2 {
+		return p2
 	}
+	return p1
+	// } else {
+	// 	part := int32(0)
+	// 	for p := int32(1); p < app.conf.Partitions; p++ {
+	// 		if app.partitionWeights[part] > app.partitionWeights[p] {
+	// 			part = p
+	// 		}
+	// 	}
+	// 	return part
+	// }
 }
-
