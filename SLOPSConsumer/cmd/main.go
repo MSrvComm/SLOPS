@@ -207,9 +207,12 @@ func printMessage(msg *sarama.ConsumerMessage, svcTm int, ip string) {
 		}
 	}
 
+	var sendingGateway string
+
 	for _, hdr := range hdrs {
 		if string(hdr.Key) == "Producer" {
 			log.Println("Arrived from producer:", string(hdr.Value))
+			sendingGateway = string(hdr.Value)
 		}
 
 		// Detect and Handle sync events.
@@ -238,6 +241,7 @@ func printMessage(msg *sarama.ConsumerMessage, svcTm int, ip string) {
 	// span.SetAttributes(attribute.String("consumed message to partition",strconv.FormatInt(int64(msg.Partition),10)))
 	span.SetAttributes(attribute.Int64("message_bus.destination", int64(msg.Partition)))
 	span.SetAttributes(attribute.String("consumer.key", key))
+	span.SetAttributes(attribute.String("sending-gateway", sendingGateway))
 	log.Printf("Container %s processed key \"%s\" from \"%d\" at offset \"%d\"",
 		ip,
 		key,
