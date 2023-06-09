@@ -86,11 +86,22 @@ func main() {
 	}(waitGroup)
 
 	// Start the map swap routine.
-	if !app.vanilla {
-		waitGroup.Add(2)
-		go app.SwapMaps()
-		go app.LossyCount(waitGroup)
-	}
+	waitGroup.Add(1)
+	go app.SwapMaps()
+
+	// We want to track the partition weights for basic Kafka as well.
+	waitGroup.Add(1)
+	go app.LossyCount(waitGroup)
+
+	// And print out the weights every second.
+	waitGroup.Add(1)
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		logTicker := time.NewTicker(time.Second)
+		for range logTicker.C {
+			app.logger.Println("Partition Weights:", app.partitionWeights)
+		}
+	}(waitGroup)
 
 	// HTTP Server.
 	srv := http.Server{
