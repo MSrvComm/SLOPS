@@ -13,7 +13,7 @@ spec:
     type: memory
     options:
       memory:
-        max-traces: 600000
+        max-traces: 900000
   ingress:
     enabled: false
   agent:
@@ -23,4 +23,4 @@ spec:
   ui:
     options:
       search:
-        maxLimit: 6000000
+        maxLimit: 9000000
