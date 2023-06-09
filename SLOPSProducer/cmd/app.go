@@ -11,7 +11,7 @@ import (
 // Application is the workhorse of the system.
 type Application struct {
 	sync.Mutex
-	vanilla          bool                   // If true then do not use the SLOPS algorithm.
+	vanilla bool // If true then do not use the SLOPS algorithm.
 	// p2c              bool                   // If true then use P2C to load balance between partitions.
 	ch               chan string            // Receive incoming keys through this channel.
 	conf             internal.Config        // Hold the configuration data.
@@ -35,12 +35,17 @@ func (app *Application) SwapMaps() {
 		if err == nil || len(keysMoved) != 0 {
 			// Change the key to partition mappings as well.
 			for _, keyS := range keysMoved {
-				weight := float64(keyS.Count) / float64(app.conf.FreqThreshold)
+				weightToAdd := float64(keyS.Count) / float64(app.conf.FreqThreshold)
+				keyMeta, err := app.keyMap.GetKey(keyS.Key)
+				weightToDel := float64(0)
+				if err == nil {
+					weightToDel = float64(keyMeta.Count) / float64(app.conf.FreqThreshold)
+				}
 				// Remove the flow from the old partition.
 				app.Lock()
-				app.partitionWeights[keyS.SourcePartition] -= weight
+				app.partitionWeights[keyS.SourcePartition] -= weightToDel
 				// Map it to a new partition.
-				app.partitionWeights[keyS.TargetPartition] += weight
+				app.partitionWeights[keyS.TargetPartition] += weightToAdd
 				app.Unlock()
 				// Add the new mapping.
 				app.backupKeyMap.AddKey(internal.KeyRecord{Key: keyS.Key, Count: keyS.Count, Partition: keyS.TargetPartition})
