@@ -22,7 +22,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-PORT=$(kubectl get svc gateway -n slops -o go-template='{{range.spec.ports}}{{if .nodePort}}{{.nodePort}}{{"\n"}}{{end}}{{end}}')
+PORT=$(kubectl get svc producer -n slops -o go-template='{{range.spec.ports}}{{if .nodePort}}{{.nodePort}}{{"\n"}}{{end}}{{end}}')
 $BASEDIR/SLOPSClient/SLOPSClient -rate $rate -iter $iter -keys $keys -url http://localhost:$PORT/new
 
 # if [ $gw == 0 ]
