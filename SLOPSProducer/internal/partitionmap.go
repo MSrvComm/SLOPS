@@ -70,7 +70,7 @@ func (p *PartitionMap) DelHotKey(key string) {
 
 // Avg weight on the partition.
 // weight = size of key (frequence of incoming messages)
-func (p *PartitionMap) getPartitionWt(partition int32) float64 {
+func (p *PartitionMap) GetPartitionWt(partition int32) float64 {
 	pTotalWt := 0
 
 	for _, kc := range p.RebalanceMap[partition] {
@@ -84,7 +84,7 @@ func (p *PartitionMap) getPartitionWt(partition int32) float64 {
 }
 
 // Avg weight across the gateway.
-func (p *PartitionMap) systemWtAvg() (float64, error) {
+func (p *PartitionMap) SystemWtAvg() (float64, error) {
 	sysTotalWt := int(0)
 	var partitions int
 	for partition := range p.RebalanceMap {
@@ -111,7 +111,7 @@ func (p *PartitionMap) getWtDiff(partition int32) (float64, error) {
 	for _, kc := range p.RebalanceMap[partition] {
 		partitionTotalWt += kc.Count
 	}
-	sysWtAvg, err := p.systemWtAvg()
+	sysWtAvg, err := p.SystemWtAvg()
 	if err != nil {
 		return 0, err
 	}
@@ -155,7 +155,7 @@ func (p *PartitionMap) keySet2Move(partition int32) ([]struct {
 // Get partitions that are below system avg.
 // And the ones that are above the system avg.
 func (p *PartitionMap) getPartitionSets() ([]int32, []int32, error) {
-	sysWtAvg, err := p.systemWtAvg()
+	sysWtAvg, err := p.SystemWtAvg()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -170,7 +170,7 @@ func (p *PartitionMap) getPartitionSets() ([]int32, []int32, error) {
 		// 	continue
 		// }
 
-		partitionWt := p.getPartitionWt(partition)
+		partitionWt := p.GetPartitionWt(partition)
 
 		if sysWtAvg > partitionWt {
 			lessThanAvgWtPartitions = append(lessThanAvgWtPartitions, partition)
@@ -191,8 +191,8 @@ func (p *PartitionMap) checkBestFit2(count, partition int32) int32 {
 		if prtn == partition {
 			continue
 		}
-		targetWt := p.getPartitionWt(prtn)
-		srcWt := p.getPartitionWt(partition)
+		targetWt := p.GetPartitionWt(prtn)
+		srcWt := p.GetPartitionWt(partition)
 		if srcWt < targetWt {
 			continue
 		}
@@ -254,7 +254,7 @@ func (p *PartitionMap) Rebalance() ([]struct {
 		SysWt           float64 // exists to check behavior
 	}
 	// System Avg weight
-	sysAvgWt, err := p.systemWtAvg()
+	sysAvgWt, err := p.SystemWtAvg()
 	if err != nil {
 		return []struct {
 			Key             string
@@ -325,7 +325,7 @@ func (p *PartitionMap) Rebalance() ([]struct {
 			// Check if partition total weight is going to fall below
 			// system avg weight if this key is moved.
 			// That means we have already moved enough keys from this partition.
-			if p.getPartitionWt(partition) <= sysAvgWt {
+			if p.GetPartitionWt(partition) <= sysAvgWt {
 				break
 			}
 		}

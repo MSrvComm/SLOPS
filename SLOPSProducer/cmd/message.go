@@ -21,19 +21,25 @@ func (app *Application) NewMessage(c *gin.Context) {
 		return
 	}
 
+	// Count key size.
+	if rand.Float64() >= app.conf.SampleThreshold {
+		app.ch <- input.Key // Send the key to the lossy counter.
+	}
 	log.Println("message sending")
 	// Use the basic version.
 	if app.vanilla {
+		log.Println("Basic Kafka")
 		partition, err := hash(input.Key, app.conf.Partitions)
 		if err != nil {
 			log.Printf("Failed to hash key %s with error %v\n", input.Key, err)
 		}
 		go app.Produce(input.Key, input.Body, partition)
 	} else { // Use the SLOPS algorithm.
+		log.Println("SMALOPS")
 		rand.Seed(time.Now().UnixNano())
-		if rand.Float64() >= app.conf.SampleThreshold {
-			app.ch <- input.Key // Send the key to the lossy counter.
-		}
+		// if rand.Float64() >= app.conf.SampleThreshold {
+		// 	app.ch <- input.Key // Send the key to the lossy counter.
+		// }
 		var partition int32
 		if rec, err := app.keyMap.GetKey(input.Key); err != nil { // Use KeyMap to decide partition.
 			// partition = app.randomPartitioner.Partition(app.conf.Partitions)
