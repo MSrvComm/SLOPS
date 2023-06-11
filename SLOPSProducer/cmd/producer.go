@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/MSrvComm/SLOPSProducer/internal"
 	"github.com/Shopify/sarama"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/Shopify/sarama/otelsarama"
 	"go.opentelemetry.io/otel"
@@ -54,14 +55,7 @@ func (app *Application) getProdConfig() *sarama.Config {
 	config.Producer.Return.Successes = true
 	config.Producer.Flush.Frequency = 500 * time.Millisecond // Flush batches every 500ms
 	config.ClientID = os.Getenv("ADDRESS")
-	// if app.vanilla {
-	// 	config.Producer.Partitioner = sarama.NewRandomPartitioner
-	// } else {
-	// 	config.Producer.Partitioner = sarama.NewManualPartitioner
-	// }
-	// if !app.vanilla {
 	config.Producer.Partitioner = sarama.NewManualPartitioner
-	// }
 	return config
 }
 
@@ -74,7 +68,6 @@ type SysDetails struct {
 
 func NewSysDetails() SysDetails {
 	return SysDetails{
-		// kafkaBrokers: []string{"kafka-service:9092"},
 		kafkaBrokers: []string{os.Getenv("KAFKA_BOOTSTRAP")},
 		kafkaTopic:   "OrderGo",
 	}
@@ -219,14 +212,14 @@ func (app *Application) Produce(key, msg string, partition ...int32) {
 }
 
 // Create and send message set header
-func (app *Application) MsgsetHdrVal(key string, partition int32) (*MessageSet, bool) {
-	var msgset *MessageSet
+func (app *Application) MsgsetHdrVal(key string, partition int32) (*internal.MessageSet, bool) {
+	var msgset *internal.MessageSet
 	partitionChanged := false
 	lastmsgset, err := app.messageSets.GetKey(key)
 	if err != nil {
 		// First message of key.
 		// Key is not being tracked.
-		msgset = &MessageSet{
+		msgset = &internal.MessageSet{
 			Key:             key,
 			SrcPartition:    -1,
 			SrcMsgsetIndex:  -1,
@@ -240,7 +233,7 @@ func (app *Application) MsgsetHdrVal(key string, partition int32) (*MessageSet, 
 			msgset = lastmsgset
 		} else {
 			// Otherwise, we are now sending to a new partition.
-			msgset = &MessageSet{
+			msgset = &internal.MessageSet{
 				Key:             key,
 				SrcPartition:    lastmsgset.DestPartition,
 				SrcMsgsetIndex:  lastmsgset.DestMsgsetIndex,

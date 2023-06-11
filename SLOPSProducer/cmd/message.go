@@ -36,26 +36,22 @@ func (app *Application) NewMessage(c *gin.Context) {
 		go app.Produce(input.Key, input.Body, partition)
 	} else { // Use the SLOPS algorithm.
 		log.Println("SMALOPS")
-		rand.Seed(time.Now().UnixNano())
-		// if rand.Float64() >= app.conf.SampleThreshold {
-		// 	app.ch <- input.Key // Send the key to the lossy counter.
-		// }
+		rand.New(rand.NewSource(time.Now().UnixNano()))
+		// rand.Seed(time.Now().UnixNano())
 		var partition int32
-		if rec, err := app.keyMap.GetKey(input.Key); err != nil { // Use KeyMap to decide partition.
-			// partition = app.randomPartitioner.Partition(app.conf.Partitions)
+		if rec := app.partitionMap.GetKey(input.Key); rec == nil { // Use KeyMap to decide partition.
 			partition, err = hash(input.Key, app.conf.Partitions)
 			if err != nil {
 				log.Printf("Failed to hash key %s with error %v\n", input.Key, err)
 			}
 		} else {
-			partition = rec.Partition
+			partition = int32(rec.Partition)
 			// Message Set header will be added by `Producer` when message is sent.
 			if rec.Delete {
-				app.backupKeyMap.Del(rec.Key) // Delete in the backup key map only.
+				app.partitionMap.DeleteKeyBackupStore(rec.Key) // Delete in the backup key map only.
 			}
 		}
 		go app.Produce(input.Key, input.Body, partition)
-		log.Println("Keymap size:", app.keyMap.Len())
 	}
 
 	log.Println("Received new request:", input)
@@ -71,8 +67,3 @@ func hash(key string, numPartitions int32) (int32, error) {
 	partition := (int32(hasher.Sum32()) & 0x7fffffff) % numPartitions
 	return partition, nil
 }
-
-// func randomPartition(numPartitions int32) int32 {
-// 	generator := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-// 	return int32(generator.Intn(int(numPartitions)))
-// }
