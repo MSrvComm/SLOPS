@@ -11,3 +11,4 @@ data:
     epsilon: 0.001
     partitions: 10
     http_port: 2048
+    swap_interval: 30
