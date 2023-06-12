@@ -51,7 +51,7 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 					// If value is above a threshold.
 					if float64(rec.Count) >= (app.conf.Support-app.conf.Epsilon)*float64(N) {
 						// If a new hot key is detected, add it.
-						if m := app.partitionMap.GetKeyBackupStore(rec.Key); m == nil {
+						if m := app.partitionMap.GetKey(rec.Key); m == nil {
 							// Map to a new partition.
 							p := app.MapToPartition()
 							app.mu.Lock()
@@ -69,11 +69,6 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 			N = 0
 			// Update items.
 			items = newItems
-			// Swap the stores.
-			// TODO: this is very very bad to swap stores here.
-			// A nasty side effect of the count function.
-			// Need better solution.
-			app.partitionMap.SwapStores()
 		}
 		app.logger.Println("N:", N)
 		app.logger.Println("Current Bucket:", currentBucket)
