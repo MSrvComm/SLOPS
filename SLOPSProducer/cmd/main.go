@@ -80,9 +80,19 @@ func main() {
 		for range logTicker.C {
 			partitionSizes := make([]float64, app.conf.Partitions)
 			for p := 0; p < int(app.conf.Partitions); p++ {
-				partitionSizes = append(partitionSizes, app.partitionMap.PartitionSize(p))
+				partitionSizes[p] = app.partitionMap.PartitionSize(p)
 			}
 			app.logger.Println("Partition Weights:", partitionSizes)
+		}
+	}(wg)
+
+	// Swap stores.
+	wg.Add(1)
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		swapTicker := time.NewTicker(time.Second * time.Duration(app.conf.SwapInterval))
+		for range swapTicker.C {
+			app.partitionMap.SwapStores()
 		}
 	}(wg)
 

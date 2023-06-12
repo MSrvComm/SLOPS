@@ -9,6 +9,7 @@ type Config struct {
 	Epsilon         float64 `yaml:"epsilon"`
 	Partitions      int32   `yaml:"partitions"`
 	HTTPPort        int     `yaml:"http_port"`
+	SwapInterval    int     `yaml:"swap_interval"`
 }
 
 func (c *Config) Parse(data []byte) error {
