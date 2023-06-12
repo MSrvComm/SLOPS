@@ -22,7 +22,8 @@ func (app *Application) NewMessage(c *gin.Context) {
 	}
 
 	// Count key size.
-	if rand.Float64() >= app.conf.SampleThreshold {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	if r.Float64() >= app.conf.SampleThreshold {
 		app.ch <- input.Key // Send the key to the lossy counter.
 	}
 	log.Println("message sending")
@@ -36,8 +37,6 @@ func (app *Application) NewMessage(c *gin.Context) {
 		go app.Produce(input.Key, input.Body, partition)
 	} else { // Use the SLOPS algorithm.
 		log.Println("SMALOPS")
-		rand.New(rand.NewSource(time.Now().UnixNano()))
-		// rand.Seed(time.Now().UnixNano())
 		var partition int32
 		if rec := app.partitionMap.GetKey(input.Key); rec == nil { // Use KeyMap to decide partition.
 			partition, err = hash(input.Key, app.conf.Partitions)
