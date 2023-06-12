@@ -47,9 +47,6 @@ func (app *Application) NewMessage(c *gin.Context) {
 		} else {
 			partition = int32(rec.Partition)
 			// Message Set header will be added by `Producer` when message is sent.
-			if rec.Delete {
-				app.partitionMap.DeleteKeyBackupStore(rec.Key) // Delete in the backup key map only.
-			}
 		}
 		go app.Produce(input.Key, input.Body, partition)
 	}

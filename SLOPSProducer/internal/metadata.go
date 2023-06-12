@@ -10,7 +10,6 @@ type KeyRecord struct {
 	Key       string // The key identifying a flow.
 	Count     uint64 // The `size` of the flow.
 	Partition int    // The partition this key is mapped to.
-	Delete    bool   // Should this key be deleted.
 }
 
 // PartitionMap stores the flows that have been mapped to each partition.
