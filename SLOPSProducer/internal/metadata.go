@@ -243,7 +243,7 @@ func (pm *PartitionMap) targetMatch(candidates *[]KeyRecord, lessThanParts *[]in
 				continue
 			}
 			// Best Match.
-			delta := math.Abs(dstSize - sysAvg - float64(kc.Count))
+			delta := math.Abs(dstSize + float64(kc.Count) - sysAvg)
 			if delta < dstDiff {
 				dstDiff = delta
 				dstPartition = partition
