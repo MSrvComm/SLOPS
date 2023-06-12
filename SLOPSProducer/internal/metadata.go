@@ -146,6 +146,9 @@ func (pm *PartitionMap) SystemAvgSize() float64 {
 
 // PartitionSize calculates and returns the total size of a partition.
 func (pm *PartitionMap) PartitionSize(partition int) float64 {
+	pm.storeMu.Lock()
+	defer pm.storeMu.Unlock()
+
 	total := 0.0
 	for p, kcArr := range pm.store {
 		if p == partition {
