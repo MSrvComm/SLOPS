@@ -69,10 +69,12 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 			N = 0
 			// Update items.
 			items = newItems
+
+			// Log print.
+			app.logger.Println("N:", N)
+			app.logger.Println("Current Bucket:", currentBucket)
+			app.logger.Printf("#Keys tracking: %d\n", len(items))
 		}
-		app.logger.Println("N:", N)
-		app.logger.Println("Current Bucket:", currentBucket)
-		app.logger.Printf("#Keys tracking: %d\n", len(items))
 	}
 }
 
