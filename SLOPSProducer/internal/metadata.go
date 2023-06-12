@@ -15,7 +15,8 @@ type KeyRecord struct {
 
 // PartitionMap stores the flows that have been mapped to each partition.
 type PartitionMap struct {
-	mu          sync.Mutex          // Lock the struct before making changes.
+	storeMu     sync.Mutex          // Lock the struct before making changes to the store.
+	bstoreMu    sync.Mutex          // Lock the struct before making changes to the backup store.
 	store       map[int][]KeyRecord // A store of flows mapped to partitions.
 	backupStore map[int][]KeyRecord // The backup store is used to recalculate key - partition mapping.
 }
@@ -41,6 +42,8 @@ func (pm *PartitionMap) PopulateMaps(partitions int) {
 // GetKey searches and returns the key metadata from the store.
 // Return nil if key not found.
 func (pm *PartitionMap) GetKey(key string) *KeyRecord {
+	pm.storeMu.Lock()
+	defer pm.storeMu.Unlock()
 	for _, kcArr := range pm.store {
 		for _, kc := range kcArr {
 			if kc.Key == key {
@@ -50,42 +53,28 @@ func (pm *PartitionMap) GetKey(key string) *KeyRecord {
 	}
 	return nil // Key not found.
 }
-
-// // AddKey adds a key to the store.
-// func (pm *PartitionMap) AddKey(key string, count uint64, partition int) {
-// 	pm.mu.Lock()
-// 	defer pm.mu.Unlock()
-
-// 	pm.store[partition] = append(pm.store[partition], KeyRecord{Key: key, Count: count, Partition: partition})
-// }
-
-// // DeleteKey deletes key from partition.
-// // Returns key metadata or nil if not found.
-// func (pm *PartitionMap) DeleteKey(key string) *KeyRecord {
-// 	for _, kcArr := range pm.store {
-// 		for i, kc := range kcArr {
-// 			if kc.Key == key {
-// 				pm.store[kc.Partition] = append(pm.store[kc.Partition][:i], pm.store[kc.Partition][i+1:]...)
-// 				return &kc
-// 			}
-// 		}
-// 	}
-// 	return nil
-// }
 
 // Backup Store methods.
-// AddKeyBackupStore adds a key to the store.
-func (pm *PartitionMap) AddKeyBackupStore(key string, count uint64, partition int) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
 
-	pm.store[partition] = append(pm.store[partition], KeyRecord{Key: key, Count: count, Partition: partition})
+// addKeyBackupStore adds a key to the backup store.
+// It is only called from the Rebalance function and thus does not use locking.
+// Rebalance already takes the locks.
+func (pm *PartitionMap) addKeyBackupStore(key string, count uint64, partition int) {
+	pm.backupStore[partition] = append(pm.backupStore[partition], KeyRecord{Key: key, Count: count, Partition: partition})
 }
 
-// GetKeyBackupStore searches and returns the key metadata from the store.
+// AddKeyBackupStore adds a key to the backup store.
+func (pm *PartitionMap) AddKeyBackupStore(key string, count uint64, partition int) {
+	pm.bstoreMu.Lock()
+	defer pm.bstoreMu.Unlock()
+
+	pm.addKeyBackupStore(key, count, partition)
+}
+
+// getKeyBackupStore searches and returns the key metadata from the store.
 // Return nil if key not found.
-func (pm *PartitionMap) GetKeyBackupStore(key string) *KeyRecord {
-	for _, kcArr := range pm.store {
+func (pm *PartitionMap) getKeyBackupStore(key string) *KeyRecord {
+	for _, kcArr := range pm.backupStore {
 		for _, kc := range kcArr {
 			if kc.Key == key {
 				return &kc
@@ -95,13 +84,13 @@ func (pm *PartitionMap) GetKeyBackupStore(key string) *KeyRecord {
 	return nil // Key not found.
 }
 
-// DeleteKeyBackupStore deletes key from partition.
-// Returns key metadata or nil if not found.
-func (pm *PartitionMap) DeleteKeyBackupStore(key string) *KeyRecord {
-	for _, kcArr := range pm.store {
+// deleteKeyBackupStore deletes key from partition in the backup store.
+// Return key metadata or nil if not found.
+func (pm *PartitionMap) deleteKeyBackupStore(key string) *KeyRecord {
+	for _, kcArr := range pm.backupStore {
 		for i, kc := range kcArr {
 			if kc.Key == key {
-				pm.store[kc.Partition] = append(pm.store[kc.Partition][:i], pm.store[kc.Partition][i+1:]...)
+				pm.backupStore[kc.Partition] = append(pm.backupStore[kc.Partition][:i], pm.backupStore[kc.Partition][i+1:]...)
 				return &kc
 			}
 		}
@@ -109,8 +98,23 @@ func (pm *PartitionMap) DeleteKeyBackupStore(key string) *KeyRecord {
 	return nil
 }
 
+// DeleteKeyBackupStore deletes key from partition.
+// Returns key metadata or nil if not found.
+func (pm *PartitionMap) DeleteKeyBackupStore(key string) *KeyRecord {
+	pm.bstoreMu.Lock()
+	defer pm.bstoreMu.Unlock()
+
+	return pm.deleteKeyBackupStore(key)
+}
+
 // SwapStores swaps the partition map stores.
 func (pm *PartitionMap) SwapStores() {
+	// Both store and backup store needs to be locked for this.
+	pm.storeMu.Lock()
+	pm.bstoreMu.Lock()
+	defer pm.storeMu.Unlock()
+	defer pm.bstoreMu.Unlock()
+
 	var p int
 	for p, pm.store[p] = range pm.backupStore {
 	}
@@ -118,20 +122,22 @@ func (pm *PartitionMap) SwapStores() {
 
 // MigrateKey moves a key from one partition to another.
 func (pm *PartitionMap) migrateKeyBackupStore(key string, count uint64, dstPartition int) {
+	pm.storeMu.Lock()
+	defer pm.storeMu.Unlock()
 	// If key already exists.
-	kc := pm.GetKeyBackupStore(key)
+	kc := pm.getKeyBackupStore(key)
 	if kc != nil {
 		// Remove from old partition.
-		pm.DeleteKeyBackupStore(key)
+		pm.deleteKeyBackupStore(key)
 	}
 	// Add to new partition.
-	pm.AddKeyBackupStore(key, count, dstPartition)
+	pm.addKeyBackupStore(key, count, dstPartition)
 }
 
 // SystemAvgSize calculates and returns the current average size of the proxy across partitions.
 func (pm *PartitionMap) SystemAvgSize() float64 {
 	total := 0.0
-	for _, kcArr := range pm.store {
+	for _, kcArr := range pm.backupStore {
 		for _, kc := range kcArr {
 			total += float64(kc.Count)
 		}
@@ -152,8 +158,26 @@ func (pm *PartitionMap) PartitionSize(partition int) float64 {
 	return total
 }
 
+// bPartitionSize calculates and returns the total size of a partition from the backup store.
+// Used for internal calculations.
+func (pm *PartitionMap) bPartitionSize(partition int) float64 {
+	total := 0.0
+	for p, kcArr := range pm.backupStore {
+		if p == partition {
+			for _, kc := range kcArr {
+				total += float64(kc.Count)
+			}
+		}
+	}
+	return total
+}
+
 // Rebalance rebalances the backup store.
 func (pm *PartitionMap) Rebalance() {
+	// Lock backup store.
+	pm.bstoreMu.Lock()
+	defer pm.bstoreMu.Unlock()
+
 	// Divide partitions into greater than and lesser than sets.
 	lessThanParts, grtrThanParts := pm.partitionSets()
 	// For each partition in grtrThanParts
@@ -176,7 +200,7 @@ func (pm *PartitionMap) partitionSets() (*[]int, *[]int) {
 	lessThanParts := make([]int, 0)
 	grtrThanParts := make([]int, 0)
 	for p := 0; p < len(pm.store); p++ {
-		pSize := pm.PartitionSize(p)
+		pSize := pm.bPartitionSize(p)
 		if pSize < sysAvg {
 			lessThanParts = append(lessThanParts, p)
 		} else if pSize > sysAvg {
@@ -188,7 +212,7 @@ func (pm *PartitionMap) partitionSets() (*[]int, *[]int) {
 
 // migrationCandidates recalculates the partitionSize and return a set of possible migration candidates.
 func (pm *PartitionMap) migrationCandidates(partition int) *[]KeyRecord {
-	diff := pm.PartitionSize(partition) - pm.SystemAvgSize()
+	diff := pm.bPartitionSize(partition) - pm.SystemAvgSize()
 	if diff <= 0 {
 		return nil
 	}
@@ -208,13 +232,13 @@ func (pm *PartitionMap) migrationCandidates(partition int) *[]KeyRecord {
 // targetMatch will find the best match for each key in candidates and return a pointer to the mappings.
 func (pm *PartitionMap) targetMatch(candidates *[]KeyRecord, lessThanParts *[]int) *map[int][]KeyRecord {
 	swapMap := make(map[int][]KeyRecord)
-	srcSize := pm.PartitionSize((*candidates)[0].Partition)
+	srcSize := pm.bPartitionSize((*candidates)[0].Partition)
 	sysAvg := pm.SystemAvgSize()
 	for _, kc := range *candidates {
 		dstPartition := kc.Partition
 		dstDiff := math.Inf(1) // Positive infinity.
 		for _, partition := range *lessThanParts {
-			dstSize := pm.PartitionSize(partition)
+			dstSize := pm.bPartitionSize(partition)
 			// Stopping condition.
 			if srcSize < dstSize || srcSize-dstSize < math.Abs(srcSize-dstSize+2*float64(kc.Count)) {
 				continue
