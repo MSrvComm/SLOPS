@@ -122,7 +122,7 @@ func (app *Application) NewProducer() Producer {
 	}
 }
 
-func (app *Application) Produce(key, msg string, partition ...int32) {
+func (app *Application) Produce(key, msg string, partition int32) {
 	tp, tperr := TracerProvider()
 	if tperr != nil {
 		log.Fatal(tperr)
@@ -150,16 +150,16 @@ func (app *Application) Produce(key, msg string, partition ...int32) {
 	}
 
 	// When Kafka is used.
-	if len(partition) == 0 {
+	if app.vanilla {
 		kmsg = &sarama.ProducerMessage{
 			Topic:   app.producer.sysDetails.kafkaTopic,
 			Key:     sarama.StringEncoder(key),
 			Value:   sarama.StringEncoder(msg),
 			Headers: hdrs,
 		}
-	} else if len(partition) == 1 { // When SLOPS is used.
+	} else { // When SMALOPS is used.
 		// Adding message set header from producer.
-		msgset, partitionchanged := app.MsgsetHdrVal(key, partition[0])
+		msgset, partitionchanged := app.MsgsetHdrVal(key, partition)
 		var msgsetHdrVal bytes.Buffer
 		enc := gob.NewEncoder(&msgsetHdrVal)
 		err := enc.Encode(msgset)
@@ -189,12 +189,9 @@ func (app *Application) Produce(key, msg string, partition ...int32) {
 				Key:       sarama.StringEncoder(key),
 				Value:     sarama.StringEncoder(msg),
 				Headers:   hdrs,
-				Partition: partition[0],
+				Partition: partition,
 			}
 		}
-	} else {
-		log.Println("Partition length:", len(partition))
-		return
 	}
 
 	// Create root span
