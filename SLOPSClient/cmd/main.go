@@ -17,7 +17,52 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func Generator(next chan bool, abort chan struct{}, num_keys uint64) <-chan string {
+// partitionKeyMap combines sets of keys that will get mapped to sets of partitions.
+// For example, keys [3, 18, 25, 34] will be mapped by the hash function to partition 0.
+// Keys [11, 26, 28, 33, 39] to partition 1 and [10, 27, 29, 32, 38] to partition 2.
+// PartitionSet 0 in this map combines keys that will get mapped to partitions 0, 1 and 2 into a single set.
+// Similarly, partitionSet 1 combines keys for partitions 4, 5 and 6 while partitionSet 2 combines
+// keys that will be mapped to partitions 7 through 9.
+var partitionKeyMap = map[int][]int{
+	0: {3, 18, 25, 34, 11, 26, 28, 33, 39, 10, 27, 29, 32, 38},
+	1: {4, 13, 20, 31, 5, 12, 21, 30, 6, 8, 15, 22},
+	2: {7, 9, 14, 23, 0, 17, 37, 1, 16, 36, 2, 19, 24, 35},
+}
+
+// TargetedGenerator sends generates keys that will be mapped to any one set of partitions at any point of time.
+// This generator is designed to overwhelm Kafka by targeting load to a smaller set of partitions
+// than available on the system.
+func TargetedGenerator(next chan bool, abort chan struct{}) <-chan string {
+	ch := make(chan string)
+	go func() {
+		count := 0
+		set := 0
+		for {
+			select {
+			case <-next:
+				// If we have already sent 3K messages.
+				// Change the partition set.
+				if count%3000 == 0 {
+					set++
+					if set > 2 {
+						set = 0
+					}
+				}
+				// Increment messaages sent.
+				count++
+				// Pick a random key within the partition set.
+				r := rand.New(rand.NewSource(time.Now().UnixNano()))
+				ind := r.Intn(len(partitionKeyMap[set]))
+				ch <- fmt.Sprintf("location_%d", partitionKeyMap[set][ind])
+			case <-abort:
+				return
+			}
+		}
+	}()
+	return ch
+}
+
+func ZipfGenerator(next chan bool, abort chan struct{}, num_keys uint64) <-chan string {
 	ch := make(chan string)
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// zipf := rand.NewZipf(r, 3.14, 2.72, num_keys)
@@ -48,7 +93,6 @@ func main() {
 	flag.IntVar(&rt, "rate", 200, "Rate of requests per second")
 	flag.IntVar(&keys, "keys", 2800, "Number of keys to choose from")
 	flag.IntVar(&iters, "iter", 1_000, "Number of times the test is run")
-	// flag.StringVar(&url, "url", "http://httpbin.org/anything/", "URL to test")
 	flag.StringVar(&url, "url", "dummy", "URL to test")
 
 	flag.Parse()
@@ -61,14 +105,12 @@ func main() {
 	// all signals will be sent to the channel.
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-	// num_keys := uint64(28_000_000)
 	num_keys := uint64(keys)
 	abort := make(chan struct{})
 	next := make(chan bool)
-	ch := Generator(next, abort, num_keys)
+	ch := ZipfGenerator(next, abort, num_keys)
+	// ch := TargetedGenerator(next, abort)
 
-	// n := 1_000_000
-	// n := 1_000
 	i := 0
 
 	frequencies := make(map[string]int)
