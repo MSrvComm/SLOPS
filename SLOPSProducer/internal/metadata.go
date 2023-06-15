@@ -15,21 +15,23 @@ type KeyRecord struct {
 
 // PartitionMap stores the flows that have been mapped to each partition.
 type PartitionMap struct {
-	storeMu sync.Mutex          // Lock the struct before making changes to the store.
-	store   map[int][]KeyRecord // A store of flows mapped to partitions.
+	storeMu sync.Mutex            // Lock the struct before making changes to the store.
+	store   map[int][]*KeyRecord  // A store of flows mapped to partitions.
+	keyMap  map[string]*KeyRecord // Points to the key record of each key.
 }
 
 // Return a new Partition Map
 func NewPartitionMap() *PartitionMap {
 	return &PartitionMap{
-		store: map[int][]KeyRecord{},
+		store:  map[int][]*KeyRecord{},
+		keyMap: map[string]*KeyRecord{},
 	}
 }
 
 // PopulateMaps initializes the stores given the number of partitions.
 func (pm *PartitionMap) PopulateMaps(partitions int) {
 	for p := 0; p < partitions; p++ {
-		pm.store[p] = make([]KeyRecord, 0)
+		pm.store[p] = make([]*KeyRecord, 0)
 	}
 }
 
@@ -37,7 +39,9 @@ func (pm *PartitionMap) PopulateMaps(partitions int) {
 // It is only called from the Rebalance function and thus does not use locking.
 // Rebalance already takes the locks.
 func (pm *PartitionMap) addKey(key string, count uint64, partition int) {
-	pm.store[partition] = append(pm.store[partition], KeyRecord{Key: key, Count: count, Partition: partition})
+	kc := KeyRecord{Key: key, Count: count, Partition: partition}
+	pm.store[partition] = append(pm.store[partition], &kc)
+	pm.keyMap[key] = &kc
 }
 
 // AddKey adds a key to the backup store.
@@ -55,7 +59,7 @@ func (pm *PartitionMap) getKey(key string) *KeyRecord {
 	for _, kcArr := range pm.store {
 		for _, kc := range kcArr {
 			if kc.Key == key {
-				return &kc
+				return kc
 			}
 		}
 	}
@@ -65,10 +69,11 @@ func (pm *PartitionMap) getKey(key string) *KeyRecord {
 // GetKey searches and returns the key metadata from the store.
 // Return nil if key not found.
 func (pm *PartitionMap) GetKey(key string) *KeyRecord {
-	pm.storeMu.Lock()
-	defer pm.storeMu.Unlock()
-
-	return pm.getKey(key)
+	kc, ok := pm.keyMap[key]
+	if ok {
+		return kc
+	}
+	return nil
 }
 
 // deleteKey deletes key from partition in the backup store.
@@ -77,8 +82,9 @@ func (pm *PartitionMap) deleteKey(key string) *KeyRecord {
 	for _, kcArr := range pm.store {
 		for i, kc := range kcArr {
 			if kc.Key == key {
-				pm.store[kc.Partition] = append(pm.store[kc.Partition][:i], pm.store[kc.Partition][i+1:]...)
-				return &kc
+				pm.store[kc.Partition] = append(pm.store[kc.Partition][:i], pm.store[kc.Partition][i+1:]...) // Delete from the store.
+				delete(pm.keyMap, key)                                                                       // Delete from the keymap.
+				return kc
 			}
 		}
 	}
@@ -191,7 +197,7 @@ func (pm *PartitionMap) migrationCandidates(partition int) *[]KeyRecord {
 		if p == partition {
 			for _, kc := range kcArr {
 				if float64(kc.Count) <= diff {
-					candidates = append(candidates, kc)
+					candidates = append(candidates, *kc)
 				}
 			}
 		}
