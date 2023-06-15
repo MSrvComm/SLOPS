@@ -156,6 +156,7 @@ func (app *Application) Produce(key, msg string, partition int32) {
 			Key:     sarama.StringEncoder(key),
 			Value:   sarama.StringEncoder(msg),
 			Headers: hdrs,
+			Partition: partition,
 		}
 	} else { // When SMALOPS is used.
 		// Adding message set header from producer.
