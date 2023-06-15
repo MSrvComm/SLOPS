@@ -3,13 +3,11 @@ package main
 import (
 	"log"
 	"os"
-	"sync"
 
 	"github.com/MSrvComm/SLOPSProducer/internal"
 )
 
 type Application struct {
-	mu           sync.Mutex
 	vanilla      bool                    // If true then do not use the SLOPS algorithm.
 	ch           chan string             // Receive incoming keys through this channel.
 	conf         *internal.Config        // Hold the configuration data.
