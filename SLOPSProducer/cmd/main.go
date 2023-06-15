@@ -86,15 +86,17 @@ func main() {
 		}
 	}(wg)
 
-	// Swap stores.
-	wg.Add(1)
-	go func(wg *sync.WaitGroup) {
-		defer wg.Done()
-		swapTicker := time.NewTicker(time.Second * time.Duration(app.conf.SwapInterval))
-		for range swapTicker.C {
-			app.partitionMap.SwapStores()
-		}
-	}(wg)
+	// Swap stores if SMALOPS is being used.
+	if !app.vanilla {
+		wg.Add(1)
+		go func(wg *sync.WaitGroup) {
+			defer wg.Done()
+			swapTicker := time.NewTicker(time.Second * time.Duration(app.conf.SwapInterval))
+			for range swapTicker.C {
+				app.partitionMap.Rebalance()
+			}
+		}(wg)
+	}
 
 	// HTTP Server.
 	srv := http.Server{

@@ -54,13 +54,11 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 						if m := app.partitionMap.GetKey(rec.Key); m == nil {
 							// Map to a new partition.
 							p := app.MapToPartition()
-							app.mu.Lock()
-							app.partitionMap.AddKeyBackupStore(rec.Key, rec.Count, p)
-							app.mu.Unlock()
+							app.partitionMap.AddKey(rec.Key, rec.Count, p)
 						}
 					}
 				} else {
-					app.partitionMap.DeleteKeyBackupStore(rec.Key)
+					app.partitionMap.DeleteKey(rec.Key)
 				}
 			}
 			// Increment current bucket.
@@ -93,13 +91,15 @@ func (app *Application) MapToPartition() int {
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	p1 := int(r.Int31n(app.conf.Partitions))
-	p2 := int(rand.Int31n(app.conf.Partitions))
+	p2 := int(r.Int31n(app.conf.Partitions))
 
 	v1 := app.partitionMap.PartitionSize(p1)
 	v2 := app.partitionMap.PartitionSize(p2)
 
 	if v1 > v2 {
+		app.logger.Println("Returning partition:", p2)
 		return p2
 	}
+	app.logger.Println("Returning partition:", p1)
 	return p1
 }
