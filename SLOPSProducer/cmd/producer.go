@@ -152,10 +152,10 @@ func (app *Application) Produce(key, msg string, partition int32) {
 	// When Kafka is used.
 	if app.vanilla {
 		kmsg = &sarama.ProducerMessage{
-			Topic:   app.producer.sysDetails.kafkaTopic,
-			Key:     sarama.StringEncoder(key),
-			Value:   sarama.StringEncoder(msg),
-			Headers: hdrs,
+			Topic:     app.producer.sysDetails.kafkaTopic,
+			Key:       sarama.StringEncoder(key),
+			Value:     sarama.StringEncoder(msg),
+			Headers:   hdrs,
 			Partition: partition,
 		}
 	} else { // When SMALOPS is used.
@@ -224,6 +224,7 @@ func (app *Application) MsgsetHdrVal(key string, partition int32) (*internal.Mes
 			DestPartition:   partition,
 			DestMsgsetIndex: 0,
 		}
+		go app.messageSets.AddKey(*msgset)
 	} else {
 		if lastmsgset.DestPartition == partition {
 			// If we are still sending to the same partition,
