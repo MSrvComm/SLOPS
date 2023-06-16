@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"log"
 	"math"
 	"sync"
 )
