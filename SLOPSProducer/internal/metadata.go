@@ -15,7 +15,7 @@ type KeyRecord struct {
 
 // PartitionMap stores the flows that have been mapped to each partition.
 type PartitionMap struct {
-	storeMu sync.Mutex            // Lock the struct before making changes to the store.
+	storeMu sync.RWMutex          // Lock the struct before making changes to the store.
 	store   map[int][]*KeyRecord  // A store of flows mapped to partitions.
 	keyMap  map[string]*KeyRecord // Points to the key record of each key.
 }
@@ -56,24 +56,20 @@ func (pm *PartitionMap) AddKey(key string, count uint64, partition int) {
 // getKey searches and returns the key metadata from the store.
 // Return nil if key not found.
 func (pm *PartitionMap) getKey(key string) *KeyRecord {
-	for _, kcArr := range pm.store {
-		for _, kc := range kcArr {
-			if kc.Key == key {
-				return kc
-			}
-		}
-	}
-	return nil // Key not found.
-}
-
-// GetKey searches and returns the key metadata from the store.
-// Return nil if key not found.
-func (pm *PartitionMap) GetKey(key string) *KeyRecord {
 	kc, ok := pm.keyMap[key]
 	if ok {
 		return kc
 	}
 	return nil
+}
+
+// GetKey searches and returns the key metadata from the store.
+// Return nil if key not found.
+func (pm *PartitionMap) GetKey(key string) *KeyRecord {
+	pm.storeMu.RLock()
+	defer pm.storeMu.RUnlock()
+
+	return pm.getKey(key)
 }
 
 // deleteKey deletes key from partition in the backup store.
@@ -114,8 +110,7 @@ func (pm *PartitionMap) migrateKey(key string, count uint64, dstPartition int) {
 	pm.addKey(key, count, dstPartition)
 }
 
-// SystemAvgSize calculates and returns the current average size of the proxy across partitions.
-func (pm *PartitionMap) SystemAvgSize() float64 {
+func (pm *PartitionMap) systemAvgSize() float64 {
 	total := 0.0
 	for _, kcArr := range pm.store {
 		for _, kc := range kcArr {
@@ -123,6 +118,14 @@ func (pm *PartitionMap) SystemAvgSize() float64 {
 		}
 	}
 	return total / float64(len(pm.store))
+}
+
+// SystemAvgSize calculates and returns the current average size of the proxy across partitions.
+func (pm *PartitionMap) SystemAvgSize() float64 {
+	pm.storeMu.RLock()
+	defer pm.storeMu.RUnlock()
+
+	return pm.systemAvgSize()
 }
 
 func (pm *PartitionMap) partitionSize(partition int) float64 {
@@ -139,18 +142,14 @@ func (pm *PartitionMap) partitionSize(partition int) float64 {
 
 // PartitionSize calculates and returns the total size of a partition.
 func (pm *PartitionMap) PartitionSize(partition int) float64 {
-	pm.storeMu.Lock()
-	defer pm.storeMu.Unlock()
+	pm.storeMu.RLock()
+	defer pm.storeMu.RUnlock()
 
 	return pm.partitionSize(partition)
 }
 
 // Rebalance rebalances the backup store.
 func (pm *PartitionMap) Rebalance() {
-	// Lock backup store.
-	pm.storeMu.Lock()
-	defer pm.storeMu.Unlock()
-
 	// Divide partitions into greater than and lesser than sets.
 	lessThanParts, grtrThanParts := pm.partitionSets()
 	// For each partition in grtrThanParts
@@ -172,7 +171,10 @@ func (pm *PartitionMap) Rebalance() {
 
 // partitionSets returns the current grtrThanParts and lessThanParts.
 func (pm *PartitionMap) partitionSets() (*[]int, *[]int) {
-	sysAvg := pm.SystemAvgSize()
+	pm.storeMu.RLock()
+	defer pm.storeMu.RUnlock()
+
+	sysAvg := pm.systemAvgSize()
 	lessThanParts := make([]int, 0)
 	grtrThanParts := make([]int, 0)
 	for p := 0; p < len(pm.store); p++ {
@@ -188,7 +190,10 @@ func (pm *PartitionMap) partitionSets() (*[]int, *[]int) {
 
 // migrationCandidates recalculates the partitionSize and return a set of possible migration candidates.
 func (pm *PartitionMap) migrationCandidates(partition int) *[]KeyRecord {
-	diff := pm.PartitionSize(partition) - pm.SystemAvgSize()
+	pm.storeMu.RLock()
+	defer pm.storeMu.RUnlock()
+
+	diff := pm.PartitionSize(partition) - pm.systemAvgSize()
 	if diff <= 0 {
 		return nil
 	}
@@ -207,9 +212,12 @@ func (pm *PartitionMap) migrationCandidates(partition int) *[]KeyRecord {
 
 // targetMatch will find the best match for each key in candidates and return a pointer to the mappings.
 func (pm *PartitionMap) targetMatch(candidates *[]KeyRecord, lessThanParts *[]int) *map[int][]KeyRecord {
+	pm.storeMu.RLock()
+	defer pm.storeMu.RUnlock()
+
 	swapMap := make(map[int][]KeyRecord)
 	srcSize := pm.PartitionSize((*candidates)[0].Partition)
-	sysAvg := pm.SystemAvgSize()
+	sysAvg := pm.systemAvgSize()
 	for _, kc := range *candidates {
 		dstPartition := kc.Partition
 		dstDiff := math.Inf(1) // Positive infinity.
