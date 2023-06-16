@@ -56,6 +56,8 @@ spec:
           value: "producer"
         - name: TRACER_COLLECTOR
           value: http://jaeger-trace-collector:14268/api/traces
+        - name: ENV
+          value: Dev
       serviceAccountName: producer-accnt
       volumes:
       - name: config

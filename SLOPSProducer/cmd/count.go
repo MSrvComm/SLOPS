@@ -51,7 +51,8 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 					// If value is above a threshold.
 					if float64(rec.Count) >= (app.conf.Support-app.conf.Epsilon)*float64(N) {
 						// If a new hot key is detected, add it.
-						if m := app.partitionMap.GetKey(rec.Key); m == nil {
+						m := app.partitionMap.GetKey(rec.Key)
+						if m == nil {
 							// Map to a new partition.
 							p := app.MapToPartition()
 							app.partitionMap.AddKey(rec.Key, rec.Count, p)
@@ -69,9 +70,9 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 			items = newItems
 
 			// Log print.
-			app.logger.Println("N:", N)
-			app.logger.Println("Current Bucket:", currentBucket)
-			app.logger.Printf("#Keys tracking: %d\n", len(items))
+			app.logger.Debug().Int("N:", N)
+			app.logger.Debug().Int("Current Bucket:", currentBucket)
+			app.logger.Debug().Int("#Keys tracking:", len(items))
 		}
 	}
 }
@@ -97,9 +98,9 @@ func (app *Application) MapToPartition() int {
 	v2 := app.partitionMap.PartitionSize(p2)
 
 	if v1 > v2 {
-		app.logger.Println("Returning partition:", p2)
+		app.logger.Debug().Int("Returning partition:", p2)
 		return p2
 	}
-	app.logger.Println("Returning partition:", p1)
+	app.logger.Debug().Int("Returning partition:", p1)
 	return p1
 }

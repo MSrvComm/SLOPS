@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MSrvComm/SLOPSProducer/internal"
+	"github.com/rs/zerolog"
 )
 
 func main() {
@@ -34,6 +35,12 @@ func main() {
 
 	app := NewApp(vanilla, &conf)
 
+	if os.Getenv("ENV") == "dev" {
+		app.logger.Level(zerolog.DebugLevel)
+	} else {
+		app.logger.Level(zerolog.InfoLevel)
+	}
+
 	// Populate partitions in partition map.
 	app.partitionMap.PopulateMaps(int(app.conf.Partitions))
 
@@ -53,7 +60,7 @@ func main() {
 		for s := range app.producer.kafkaProducer.Successes() {
 			// Print out timestamp, partition and offset.
 			// Later we will use this to realize total rate of messages into a partition.
-			log.Printf("Received Offset: %d at time %v on partition %d\n", s.Offset, s.Timestamp, s.Partition)
+			app.logger.Info().Msg(fmt.Sprintf("Received Offset: %d at time %v on partition %d\n", s.Offset, s.Timestamp, s.Partition))
 			successes++
 		}
 	}(wg)
@@ -63,7 +70,7 @@ func main() {
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
 		for err := range app.producer.kafkaProducer.Errors() {
-			log.Println(err)
+			app.logger.Error().AnErr("Kafka Error", err)
 			errors++
 		}
 	}(wg)
@@ -82,7 +89,8 @@ func main() {
 			for p := 0; p < int(app.conf.Partitions); p++ {
 				partitionSizes[p] = app.partitionMap.PartitionSize(p)
 			}
-			app.logger.Println("Partition Weights:", partitionSizes)
+			// app.logger.Println("Partition Weights:", partitionSizes)
+			app.logger.Debug().Str("Partition Weights:", fmt.Sprintf("%v", partitionSizes))
 		}
 	}(wg)
 
@@ -107,7 +115,7 @@ func main() {
 		WriteTimeout: 30 * time.Second,
 	}
 
-	log.Printf("Starting HTTP server on %s", srv.Addr)
-	log.Fatal(srv.ListenAndServe())
+	app.logger.Info().Msg(fmt.Sprintf("Starting HTTP server on %s", srv.Addr))
+	app.logger.Fatal().AnErr("server failure", srv.ListenAndServe())
 	wg.Wait()
 }

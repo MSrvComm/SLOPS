@@ -1,10 +1,10 @@
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/MSrvComm/SLOPSProducer/internal"
+	"github.com/rs/zerolog"
 )
 
 type Application struct {
@@ -13,7 +13,7 @@ type Application struct {
 	conf         *internal.Config        // Hold the configuration data.
 	partitionMap *internal.PartitionMap  // Hot keys mapped to each partition.
 	messageSets  *internal.MessageSetMap // Map Message Sets
-	logger       *log.Logger             // System level logger.
+	logger       zerolog.Logger          // System level logger.
 	producer     Producer                // Kafka producer.
 }
 
@@ -24,6 +24,6 @@ func NewApp(vanilla bool, conf *internal.Config) *Application {
 		conf:         conf,
 		partitionMap: internal.NewPartitionMap(),
 		messageSets:  &internal.MessageSetMap{KV: map[string]internal.MessageSet{}},
-		logger:       log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile),
+		logger:       zerolog.New(os.Stdout),
 	}
 }

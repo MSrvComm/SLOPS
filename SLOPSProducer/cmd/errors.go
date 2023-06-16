@@ -8,7 +8,7 @@ import (
 )
 
 func (app *Application) logError(err error) {
-	app.logger.Println(err)
+	app.logger.Error().AnErr("Error:", err)
 }
 
 // The errorResponse() method is a generic helper for sending JSON-formatted error

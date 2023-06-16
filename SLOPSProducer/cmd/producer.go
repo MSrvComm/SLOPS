@@ -45,7 +45,7 @@ func TracerProvider() (*sdktrace.TracerProvider, error) {
 
 func (app *Application) getProdConfig() *sarama.Config {
 	// sarama logging to stdout.
-	sarama.Logger = app.logger
+	sarama.Logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile)
 
 	// producer config
 	config := sarama.NewConfig()

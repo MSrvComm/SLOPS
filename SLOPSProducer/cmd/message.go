@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"hash/fnv"
 	"log"
 	"math/rand"
@@ -9,12 +10,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (app *Application) NewMessage(c *gin.Context) {
-	var input struct {
-		Key  string `json:"key"`
-		Body string `json:"body"`
-	}
+type kInput struct {
+	Key  string `json:"key"`
+	Body string `json:"body"`
+}
 
+func (in kInput) String() string {
+	return fmt.Sprintf("Key: %s, Body: %s", in.Key, in.Body)
+}
+
+func (app *Application) NewMessage(c *gin.Context) {
+	var input kInput
 	err := app.readJSON(c, &input)
 	if err != nil {
 		app.badRequestResponse(c, err)
@@ -26,7 +32,7 @@ func (app *Application) NewMessage(c *gin.Context) {
 	if r.Float64() >= app.conf.SampleThreshold {
 		app.ch <- input.Key // Send the key to the lossy counter.
 	}
-	log.Println("message sending")
+	app.logger.Debug().Msg("message sending")
 	// Use the basic version.
 	if app.vanilla {
 		partition, err := hash(input.Key, app.conf.Partitions)
@@ -51,7 +57,7 @@ func (app *Application) NewMessage(c *gin.Context) {
 		go app.Produce(input.Key, input.Body, partition)
 	}
 
-	app.logger.Println("Received new request:", input)
+	app.logger.Debug().Str("Received new request:", input.String())
 }
 
 func hash(key string, numPartitions int32) (int32, error) {
