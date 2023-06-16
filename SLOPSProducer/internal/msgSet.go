@@ -45,7 +45,7 @@ func (m *MessageSet) UnmarshalBinary(data []byte) error {
 }
 
 type MessageSetMap struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 	KV map[string]MessageSet
 }
 
@@ -62,8 +62,8 @@ func (m *MessageSetMap) AddKey(rec MessageSet) *MessageSet {
 }
 
 func (m *MessageSetMap) GetKey(key string) (*MessageSet, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	if val, ok := m.KV[key]; !ok {
 		return nil, errors.New("no such value")
