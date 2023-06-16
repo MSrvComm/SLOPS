@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -110,9 +111,9 @@ func (app *Application) NewProducer() Producer {
 		otelsarama.WithPropagators(propagators),
 	)
 	if err != nil {
-		log.Println("Error creating producer:", err.Error())
+		app.logger.Error().AnErr("Error creating producer", err)
 	}
-	log.Println("propogators:", kafkaProducer)
+	app.logger.Debug().Msg(fmt.Sprintf("propogators: %v\n", kafkaProducer))
 
 	return Producer{
 		envVar:        envVar,
@@ -165,7 +166,7 @@ func (app *Application) Produce(key, msg string, partition int32) {
 		enc := gob.NewEncoder(&msgsetHdrVal)
 		err := enc.Encode(msgset)
 		if err != nil {
-			log.Println("Encoding err:", err)
+			app.logger.Error().AnErr("Encoding err", err)
 			return
 		}
 		msgsetHdr := sarama.RecordHeader{
@@ -183,7 +184,7 @@ func (app *Application) Produce(key, msg string, partition int32) {
 				Headers:   hdrs,
 				Partition: msgset.SrcPartition,
 			}
-			log.Printf("Key %s switching to %d from %d\n", key, msgset.DestPartition, msgset.SrcPartition)
+			app.logger.Printf("Key %s switching to %d from %d\n", key, msgset.DestPartition, msgset.SrcPartition)
 		} else {
 			kmsg = &sarama.ProducerMessage{
 				Topic:     app.producer.sysDetails.kafkaTopic,
@@ -206,7 +207,7 @@ func (app *Application) Produce(key, msg string, partition int32) {
 	span.SetAttributes(attribute.String("producer.key", key))
 
 	app.producer.kafkaProducer.Input() <- kmsg
-	log.Println("message sent on partition:", kmsg.Partition)
+	app.logger.Info().Int32("message sent on partition", kmsg.Partition)
 }
 
 // Create and send message set header

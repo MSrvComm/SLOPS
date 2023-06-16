@@ -46,7 +46,6 @@ func (pm *PartitionMap) addKey(key string, count uint64, partition int) {
 
 // AddKey adds a key to the backup store.
 func (pm *PartitionMap) AddKey(key string, count uint64, partition int) {
-	log.Printf("Adding key %s to partition %d\n", key, partition)
 	pm.storeMu.Lock()
 	defer pm.storeMu.Unlock()
 

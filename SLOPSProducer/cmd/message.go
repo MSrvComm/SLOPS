@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"hash/fnv"
-	"log"
 	"math/rand"
 	"time"
 
@@ -36,21 +35,23 @@ func (app *Application) NewMessage(c *gin.Context) {
 	// Use the basic version.
 	if app.vanilla {
 		partition, err := hash(input.Key, app.conf.Partitions)
-		app.logger.Printf("Kafka: Hashing new key to partition %d of %d partitions\n.", partition, app.conf.Partitions)
 		if err != nil {
-			log.Printf("Failed to hash key %s with error %v\n", input.Key, err)
+			app.logger.Error().AnErr(fmt.Sprintf("Kafka hashing error: %s", input.Key), err)
+			return
 		}
+		app.logger.Printf("Kafka: Hashing new key to partition %d of %d partitions\n.", partition, app.conf.Partitions)
 		go app.Produce(input.Key, input.Body, partition)
 	} else { // Use the SLOPS algorithm.
 		var partition int32
 		if rec := app.partitionMap.GetKey(input.Key); rec == nil { // Use KeyMap to decide partition.
 			partition, err = hash(input.Key, app.conf.Partitions)
 			if err != nil {
-				log.Printf("Failed to hash key %s with error %v\n", input.Key, err)
+				app.logger.Error().AnErr(fmt.Sprintf("SMALOPS hashing error: %s", input.Key), err)
+				return
 			}
 			app.logger.Printf("SMALOPS: Hashing new key to partition %d of %d partitions\n.", partition, app.conf.Partitions)
 		} else {
-			app.logger.Printf("SMALOPS: Sending to partition %d of %d partitions\n.", partition, app.conf.Partitions)
+			app.logger.Printf("SMALOPS: Sending to partition %d of %d partitions\n.", rec.Partition, app.conf.Partitions)
 			partition = int32(rec.Partition)
 			// Message Set header will be added by `Producer` when message is sent.
 		}

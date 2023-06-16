@@ -24,6 +24,6 @@ func NewApp(vanilla bool, conf *internal.Config) *Application {
 		conf:         conf,
 		partitionMap: internal.NewPartitionMap(),
 		messageSets:  &internal.MessageSetMap{KV: map[string]internal.MessageSet{}},
-		logger:       zerolog.New(os.Stdout),
+		logger:       zerolog.New(os.Stdout).With().Timestamp().Logger(),
 	}
 }
