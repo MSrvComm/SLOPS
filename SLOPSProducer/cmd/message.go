@@ -39,7 +39,7 @@ func (app *Application) NewMessage(c *gin.Context) {
 			app.logger.Error().AnErr(fmt.Sprintf("Kafka hashing error: %s", input.Key), err)
 			return
 		}
-		app.logger.Printf("Kafka: Hashing new key to partition %d of %d partitions\n.", partition, app.conf.Partitions)
+		app.logger.Printf("Kafka: Hashing new key to partition %d of %d partitions.", partition, app.conf.Partitions)
 		go app.Produce(input.Key, input.Body, partition)
 	} else { // Use the SLOPS algorithm.
 		var partition int32
@@ -49,9 +49,9 @@ func (app *Application) NewMessage(c *gin.Context) {
 				app.logger.Error().AnErr(fmt.Sprintf("SMALOPS hashing error: %s", input.Key), err)
 				return
 			}
-			app.logger.Printf("SMALOPS: Hashing new key to partition %d of %d partitions\n.", partition, app.conf.Partitions)
+			app.logger.Printf("SMALOPS: Hashing new key to partition %d of %d partitions.", partition, app.conf.Partitions)
 		} else {
-			app.logger.Printf("SMALOPS: Sending to partition %d of %d partitions\n.", rec.Partition, app.conf.Partitions)
+			app.logger.Printf("SMALOPS: Sending to partition %d of %d partitions.", rec.Partition, app.conf.Partitions)
 			partition = int32(rec.Partition)
 			// Message Set header will be added by `Producer` when message is sent.
 		}
