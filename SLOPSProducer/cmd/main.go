@@ -60,7 +60,7 @@ func main() {
 		for s := range app.producer.kafkaProducer.Successes() {
 			// Print out timestamp, partition and offset.
 			// Later we will use this to realize total rate of messages into a partition.
-			app.logger.Info().Msg(fmt.Sprintf("Received Offset: %d at time %v on partition %d\n", s.Offset, s.Timestamp, s.Partition))
+			app.logger.Info().Msgf("Received Offset: %d at time %v on partition %d", s.Offset, s.Timestamp, s.Partition)
 			successes++
 		}
 	}(wg)
