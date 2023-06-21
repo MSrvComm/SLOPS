@@ -9,6 +9,6 @@ data:
     sample_threshold: 0.5
     support: 0.01
     epsilon: 0.001
-    partitions: 10
+    partitions: 100
     http_port: 2048
-    swap_interval: 30
+    swap_interval: 10
