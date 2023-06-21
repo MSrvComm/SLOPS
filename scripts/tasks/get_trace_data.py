@@ -1,8 +1,9 @@
 #!/usr/bin/python
 
+import pandas as pd
 import requests
 from datetime import timedelta
-import pandas as pd
+import sys
 
 def get_traces(service, hours, limit) -> list:
     # service is the name of the service for which we want to fetch the traces
@@ -10,6 +11,7 @@ def get_traces(service, hours, limit) -> list:
     # limit is the number of traces we want to fetch
     url = f"http://localhost:16686/api/traces?service={service}&loopback={hours}h&prettyPrint=true&limit={limit}"
     response = requests.get(url)
+    print(f"#records: {len(response.json()['data'])}")
     return response.json()['data']
 
 def format_data(raw_data) -> dict:
@@ -55,5 +57,17 @@ def format_data(raw_data) -> dict:
 def dataframe_to_csv(data: dict, fname: str) -> pd.DataFrame:
     return pd.DataFrame.from_dict(data).to_csv(fname)
 
+def usage():
+    print(f"{sys.argv[0]} saves trace data from experiment as a csv file.")
+    print("Users can optionally provide a file name to store data.")
+    print("Otherwise the traces will be store in 'data/consumer.csv'")
+
 if __name__ == "__main__":
-    dataframe_to_csv(format_data(get_traces("consumer", 5, 90000)), "data/consumer.csv")
+    fname = "data/consumer.csv"
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "-h":
+            usage()
+            exit()
+        else:
+            fname = sys.argv[1]
+    dataframe_to_csv(format_data(get_traces("consumer", 5, 600000)), fname)
