@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/gob"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"strconv"
@@ -25,7 +26,6 @@ import (
 )
 
 const (
-	// kafkaConn = "kafka-service:9092"
 	topic = "OrderGo"
 	group = "OrderGroup"
 )
@@ -78,8 +78,6 @@ func main() {
 	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.BalanceStrategySticky}
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	config.ClientID = os.Getenv("ADDRESS")
-	// config.Consumer.Fetch.Max = 10
-	// config.Consumer.Fetch.Min = 8
 
 	kafkaConn := os.Getenv("KAFKA_BOOTSTRAP")
 
@@ -202,14 +200,20 @@ func printMessage(msg *sarama.ConsumerMessage, svcTm int, ip string) {
 	hdrs := msg.Headers
 	start := time.Now()
 	for {
+		// Simulating work
 		if time.Since(start) > time.Duration(svcTm)*time.Microsecond {
 			break
 		}
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		r.ExpFloat64()
 	}
+
+	var sendingGateway string
 
 	for _, hdr := range hdrs {
 		if string(hdr.Key) == "Producer" {
 			log.Println("Arrived from producer:", string(hdr.Value))
+			sendingGateway = string(hdr.Value)
 		}
 
 		// Detect and Handle sync events.
@@ -238,6 +242,7 @@ func printMessage(msg *sarama.ConsumerMessage, svcTm int, ip string) {
 	// span.SetAttributes(attribute.String("consumed message to partition",strconv.FormatInt(int64(msg.Partition),10)))
 	span.SetAttributes(attribute.Int64("message_bus.destination", int64(msg.Partition)))
 	span.SetAttributes(attribute.String("consumer.key", key))
+	span.SetAttributes(attribute.String("sending-gateway", sendingGateway))
 	log.Printf("Container %s processed key \"%s\" from \"%d\" at offset \"%d\"",
 		ip,
 		key,

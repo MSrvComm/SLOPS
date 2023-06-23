@@ -1,19 +1,23 @@
 package main
 
 import (
-	"log"
 	"math"
 	"math/rand"
 	"sync"
 	"time"
-
-	"github.com/MSrvComm/SLOPSProducer/internal"
 )
+
+// Record struct.
+type Record struct {
+	Key    string
+	Count  uint64
+	Bucket int
+}
 
 func (app *Application) LossyCount(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	// Hold the hot key records
+	// Hold hot keys.
 	items := make([]Record, 0)
 	currentBucket := 1
 	N := 0
@@ -23,62 +27,53 @@ func (app *Application) LossyCount(wg *sync.WaitGroup) {
 		key := <-app.ch
 		N++
 
-		// Key is already known
+		// Key is known.
 		if index, b := checkKeyList(key, &items); b {
 			items[index].Count++
 		} else {
-			// Adding new key
+			// Adding new key to records.
 			rec := Record{Key: key, Count: 1, Bucket: currentBucket - 1}
 			items = append(items, rec)
 		}
 
 		// The bucket turns over.
 		if N >= width {
-			// Do not change items while iterating over it.
+			// Do not change the ds while iterating over it.
 			newItems := make([]Record, 0)
-			for index, rec := range items {
-				// Reduce the count of each item
-				items[index].Count--
-				if rec.Count+rec.Bucket >= currentBucket {
-					// This item stays
+
+			for _, rec := range items {
+				// Reduce count of each index.
+				rec.Count--
+				if rec.Count+uint64(rec.Bucket) >= uint64(currentBucket) {
+					// This item stays.
 					newItems = append(newItems, rec)
 
 					// If value is above a threshold.
 					if float64(rec.Count) >= (app.conf.Support-app.conf.Epsilon)*float64(N) {
-						// Calculate the weight of keys that are not being deleted.
-						weight := float64(rec.Count) / float64(app.conf.FreqThreshold)
-						// If a new hot key is detected, add it to a partition.
-						if _, err := app.backupKeyMap.GetKey(rec.Key); err != nil { // Get information from backup key map.
-							p := app.MapToPartition() // Get a mapping to a partition.
-							// Lock the partition weights and update.
-							app.Lock()
-							app.partitionWeights[p] += weight
-							app.Unlock()
-
-							app.partitionMap.AddHotKey(p, rec.Key, rec.Count) // Add new key to partition map.
-
-							// Add the new mapping.
-							app.backupKeyMap.AddKey(internal.KeyRecord{Key: rec.Key, Count: rec.Count, Partition: p}) // Add new partition mapping to backupkeymap
+						// If a new hot key is detected, add it.
+						m := app.partitionMap.GetKey(rec.Key)
+						if m == nil {
+							// Map to a new partition.
+							p := app.MapToPartition()
+							app.partitionMap.AddKey(rec.Key, rec.Count, p)
 						}
 					}
 				} else {
-					// Mark for deletion but do not delete this here.
-					// This will be deleted next time when the `message` function sends a message for this key.
-					// This allows the `message` function to send an update message to both old and new partitions.
-					app.backupKeyMap.MarkForDeletion(rec.Key)
-					app.partitionMap.DelHotKey(rec.Key) // We can delete it from the partition mapping.
+					app.partitionMap.DeleteKey(rec.Key)
 				}
 			}
-			// Increment bucket
+			// Increment current bucket.
 			currentBucket++
-			// Reset N
+			// Reset N.
 			N = 0
-			// Swap
+			// Update items.
 			items = newItems
+
+			// Log print.
+			app.logger.Debug().Int("N:", N)
+			app.logger.Debug().Int("Current Bucket:", currentBucket)
+			app.logger.Debug().Int("#Keys tracking:", len(items))
 		}
-		log.Println("N:", N)
-		log.Println("Current Bucket:", currentBucket)
-		log.Printf("#Keys tracking: %d\n", len(items))
 	}
 }
 
@@ -92,30 +87,20 @@ func checkKeyList(key string, items *[]Record) (int, bool) {
 	return -1, false
 }
 
-// Check curre
-
 // Create Mapping to partition for a new hot key.
-func (app *Application) MapToPartition() int32 {
-	if app.p2c {
-		rand.Seed(time.Now().UnixNano())
-		p1 := rand.Int31n(app.conf.Partitions)
-		p2 := rand.Int31n(app.conf.Partitions)
+func (app *Application) MapToPartition() int {
 
-		v1 := app.partitionWeights[p1]
-		v2 := app.partitionWeights[p2]
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	p1 := int(r.Int31n(app.conf.Partitions))
+	p2 := int(r.Int31n(app.conf.Partitions))
 
-		if v1 > v2 {
-			return p2
-		}
-		return p1
-	} else {
-		part := int32(0)
-		for p := int32(1); p < app.conf.Partitions; p++ {
-			if app.partitionWeights[part] > app.partitionWeights[p] {
-				part = p
-			}
-		}
-		return part
+	v1 := app.partitionMap.PartitionSize(p1)
+	v2 := app.partitionMap.PartitionSize(p2)
+
+	if v1 > v2 {
+		app.logger.Debug().Int("Returning partition:", p2)
+		return p2
 	}
+	app.logger.Debug().Int("Returning partition:", p1)
+	return p1
 }
-

@@ -15,7 +15,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  namespace: default                                                                                                                         
+  namespace: slops                                                                                                                         
   labels:                                                                                                          
     app: producer
   name: producer
@@ -52,16 +52,12 @@ spec:
         - name: VANILLA
           # value: "true" # original Kafka
           value: "false" # SMALOPS
-        - name: P2C
-          # value: "false"  # original Kafka
-          value: "true" # SMALOPS
-        # - name: LOSSY
-        #   # value: "false" # original Kafka
-        #   value: "true" # SMALOPS
         - name: TRACER_NAME
           value: "producer"
         - name: TRACER_COLLECTOR
           value: http://jaeger-trace-collector:14268/api/traces
+        - name: ENV
+          value: Dev
       serviceAccountName: producer-accnt
       volumes:
       - name: config

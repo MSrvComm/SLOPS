@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 	"log"
 	"os"
 	"time"
 
+	"github.com/MSrvComm/SLOPSProducer/internal"
 	"github.com/Shopify/sarama"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/Shopify/sarama/otelsarama"
 	"go.opentelemetry.io/otel"
@@ -44,7 +46,7 @@ func TracerProvider() (*sdktrace.TracerProvider, error) {
 
 func (app *Application) getProdConfig() *sarama.Config {
 	// sarama logging to stdout.
-	sarama.Logger = app.logger
+	sarama.Logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Llongfile)
 
 	// producer config
 	config := sarama.NewConfig()
@@ -54,14 +56,7 @@ func (app *Application) getProdConfig() *sarama.Config {
 	config.Producer.Return.Successes = true
 	config.Producer.Flush.Frequency = 500 * time.Millisecond // Flush batches every 500ms
 	config.ClientID = os.Getenv("ADDRESS")
-	// if app.vanilla {
-	// 	config.Producer.Partitioner = sarama.NewRandomPartitioner
-	// } else {
-	// 	config.Producer.Partitioner = sarama.NewManualPartitioner
-	// }
-	// if !app.vanilla {
 	config.Producer.Partitioner = sarama.NewManualPartitioner
-	// }
 	return config
 }
 
@@ -74,7 +69,6 @@ type SysDetails struct {
 
 func NewSysDetails() SysDetails {
 	return SysDetails{
-		// kafkaBrokers: []string{"kafka-service:9092"},
 		kafkaBrokers: []string{os.Getenv("KAFKA_BOOTSTRAP")},
 		kafkaTopic:   "OrderGo",
 	}
@@ -117,9 +111,9 @@ func (app *Application) NewProducer() Producer {
 		otelsarama.WithPropagators(propagators),
 	)
 	if err != nil {
-		log.Println("Error creating producer:", err.Error())
+		app.logger.Error().AnErr("Error creating producer", err)
 	}
-	log.Println("propogators:", kafkaProducer)
+	app.logger.Debug().Msg(fmt.Sprintf("propogators: %v\n", kafkaProducer))
 
 	return Producer{
 		envVar:        envVar,
@@ -129,7 +123,7 @@ func (app *Application) NewProducer() Producer {
 	}
 }
 
-func (app *Application) Produce(key, msg string, partition ...int32) {
+func (app *Application) Produce(key, msg string, partition int32) {
 	tp, tperr := TracerProvider()
 	if tperr != nil {
 		log.Fatal(tperr)
@@ -157,21 +151,22 @@ func (app *Application) Produce(key, msg string, partition ...int32) {
 	}
 
 	// When Kafka is used.
-	if len(partition) == 0 {
+	if app.vanilla {
 		kmsg = &sarama.ProducerMessage{
-			Topic:   app.producer.sysDetails.kafkaTopic,
-			Key:     sarama.StringEncoder(key),
-			Value:   sarama.StringEncoder(msg),
-			Headers: hdrs,
+			Topic:     app.producer.sysDetails.kafkaTopic,
+			Key:       sarama.StringEncoder(key),
+			Value:     sarama.StringEncoder(msg),
+			Headers:   hdrs,
+			Partition: partition,
 		}
-	} else if len(partition) == 1 { // When SLOPS is used.
+	} else { // When SMALOPS is used.
 		// Adding message set header from producer.
-		msgset, partitionchanged := app.MsgsetHdrVal(key, partition[0])
+		msgset, partitionchanged := app.MsgsetHdrVal(key, partition)
 		var msgsetHdrVal bytes.Buffer
 		enc := gob.NewEncoder(&msgsetHdrVal)
 		err := enc.Encode(msgset)
 		if err != nil {
-			log.Println("Encoding err:", err)
+			app.logger.Error().AnErr("Encoding err", err)
 			return
 		}
 		msgsetHdr := sarama.RecordHeader{
@@ -189,19 +184,16 @@ func (app *Application) Produce(key, msg string, partition ...int32) {
 				Headers:   hdrs,
 				Partition: msgset.SrcPartition,
 			}
-			log.Printf("Key %s switching to %d from %d\n", key, msgset.DestPartition, msgset.SrcPartition)
+			app.logger.Printf("Key %s switching to %d from %d\n", key, msgset.DestPartition, msgset.SrcPartition)
 		} else {
 			kmsg = &sarama.ProducerMessage{
 				Topic:     app.producer.sysDetails.kafkaTopic,
 				Key:       sarama.StringEncoder(key),
 				Value:     sarama.StringEncoder(msg),
 				Headers:   hdrs,
-				Partition: partition[0],
+				Partition: partition,
 			}
 		}
-	} else {
-		log.Println("Partition length:", len(partition))
-		return
 	}
 
 	// Create root span
@@ -215,24 +207,25 @@ func (app *Application) Produce(key, msg string, partition ...int32) {
 	span.SetAttributes(attribute.String("producer.key", key))
 
 	app.producer.kafkaProducer.Input() <- kmsg
-	log.Println("message sent on partition:", kmsg.Partition)
+	app.logger.Info().Int32("message sent on partition", kmsg.Partition)
 }
 
 // Create and send message set header
-func (app *Application) MsgsetHdrVal(key string, partition int32) (*MessageSet, bool) {
-	var msgset *MessageSet
+func (app *Application) MsgsetHdrVal(key string, partition int32) (*internal.MessageSet, bool) {
+	var msgset *internal.MessageSet
 	partitionChanged := false
 	lastmsgset, err := app.messageSets.GetKey(key)
 	if err != nil {
 		// First message of key.
 		// Key is not being tracked.
-		msgset = &MessageSet{
+		msgset = &internal.MessageSet{
 			Key:             key,
 			SrcPartition:    -1,
 			SrcMsgsetIndex:  -1,
 			DestPartition:   partition,
 			DestMsgsetIndex: 0,
 		}
+		go app.messageSets.AddKey(*msgset)
 	} else {
 		if lastmsgset.DestPartition == partition {
 			// If we are still sending to the same partition,
@@ -240,7 +233,7 @@ func (app *Application) MsgsetHdrVal(key string, partition int32) (*MessageSet, 
 			msgset = lastmsgset
 		} else {
 			// Otherwise, we are now sending to a new partition.
-			msgset = &MessageSet{
+			msgset = &internal.MessageSet{
 				Key:             key,
 				SrcPartition:    lastmsgset.DestPartition,
 				SrcMsgsetIndex:  lastmsgset.DestMsgsetIndex,

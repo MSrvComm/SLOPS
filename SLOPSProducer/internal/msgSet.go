@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"bytes"
@@ -45,13 +45,13 @@ func (m *MessageSet) UnmarshalBinary(data []byte) error {
 }
 
 type MessageSetMap struct {
-	sync.Mutex
+	mu sync.RWMutex
 	KV map[string]MessageSet
 }
 
 func (m *MessageSetMap) AddKey(rec MessageSet) *MessageSet {
-	m.Lock()
-	defer m.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	if val, exist := m.KV[rec.Key]; exist {
 		m.KV[rec.Key] = rec
@@ -62,8 +62,8 @@ func (m *MessageSetMap) AddKey(rec MessageSet) *MessageSet {
 }
 
 func (m *MessageSetMap) GetKey(key string) (*MessageSet, error) {
-	// m.Lock()
-	// defer m.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	if val, ok := m.KV[key]; !ok {
 		return nil, errors.New("no such value")
@@ -73,8 +73,8 @@ func (m *MessageSetMap) GetKey(key string) (*MessageSet, error) {
 }
 
 func (m *MessageSetMap) Del(key string) {
-	m.Lock()
-	defer m.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	delete(m.KV, key)
 }

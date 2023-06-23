@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: slops-controller
+  namespace: slops
+spec:
+  ports:
+  - port: 62000
+    protocol: TCP
+    nodePort: 30000
+  selector:
+    app: slops-controller
+  type: NodePort
+
+---
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  namespace: slops                                                                                                                         
+  labels:                                                                                                          
+    app: slops-controller
+  name: slops-controller
+spec:
+  selector:
+    matchLabels:
+      app: slops-controller
+  template:
+    metadata:
+      labels:
+        app: slops-controller
+    spec:
+      containers:
+      - image: ratnadeepb/slops-controller:latest
+        name: slops-controller
+        ports:
+        - containerPort: 62000
+      serviceAccountName: controller-accnt

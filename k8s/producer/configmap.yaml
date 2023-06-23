@@ -6,14 +6,9 @@ metadata:
 data:
   config.yaml: |
     service: "producer"
-    update_interval: 30
-    update_interval_unit: "second"
-    freq_threshold: 50
     sample_threshold: 0.5
-    chg_percent: 10
     support: 0.01
     epsilon: 0.001
-    partitions: 10
-    grpc_port: 4000
+    partitions: 100
     http_port: 2048
-    swap_interval: 30
+    swap_interval: 10
