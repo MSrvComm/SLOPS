@@ -1,7 +1,10 @@
 package internal
 
 import (
+	"log"
 	"math"
+	"os"
+	"strconv"
 	"sync"
 )
 
@@ -14,16 +17,23 @@ type KeyRecord struct {
 
 // PartitionMap stores the flows that have been mapped to each partition.
 type PartitionMap struct {
-	storeMu sync.RWMutex          // Lock the struct before making changes to the store.
-	store   map[int][]*KeyRecord  // A store of flows mapped to partitions.
-	keyMap  map[string]*KeyRecord // Points to the key record of each key.
+	storeMu                sync.RWMutex          // Lock the struct before making changes to the store.
+	loadImbalanceTolerance int                   // Percentage in load imbalance to be tolerated.
+	store                  map[int][]*KeyRecord  // A store of flows mapped to partitions.
+	keyMap                 map[string]*KeyRecord // Points to the key record of each key.
 }
 
 // Return a new Partition Map
 func NewPartitionMap() *PartitionMap {
+	wt_tol, err := strconv.ParseInt(os.Getenv("LOAD_IMBALANCE_TOLERANCE"), 10, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return &PartitionMap{
-		store:  map[int][]*KeyRecord{},
-		keyMap: map[string]*KeyRecord{},
+		loadImbalanceTolerance: int(wt_tol),
+		store:                  map[int][]*KeyRecord{},
+		keyMap:                 map[string]*KeyRecord{},
 	}
 }
 
@@ -144,6 +154,27 @@ func (pm *PartitionMap) PartitionSize(partition int) float64 {
 	defer pm.storeMu.RUnlock()
 
 	return pm.partitionSize(partition)
+}
+
+// Check if the load on the partitions differ by more than the tolerance level.
+func (pm *PartitionMap) checkTolerance() bool {
+	pm.storeMu.RLock()
+	partitionSizes := make([]float64, len(pm.store))
+	for p := range pm.store {
+		partitionSizes = append(partitionSizes, pm.partitionSize(p))
+	}
+	pm.storeMu.RUnlock()
+
+	maxLoad, minLoad := 0.0, math.Inf(1)
+	for _, load := range partitionSizes {
+		if load > maxLoad {
+			maxLoad = load
+		} else if load < minLoad {
+			minLoad = load
+		}
+	}
+
+	return (maxLoad-minLoad)/minLoad >= (float64(pm.loadImbalanceTolerance)/100)*minLoad
 }
 
 // Rebalance rebalances the backup store.
