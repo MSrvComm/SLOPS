@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MSrvComm/SLOPSProducer/internal"
+	"github.com/MSrvComm/SLOPSProducer/configs"
 	"github.com/rs/zerolog"
 )
 
@@ -21,7 +21,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var conf internal.Config
+	var conf configs.Config
 	if err := conf.Parse(data); err != nil {
 		log.Fatal(err)
 	}

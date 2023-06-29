@@ -31,7 +31,7 @@ spec:
         app: producer
     spec:
       containers:
-      - image: ratnadeepb/slops-producer:latest
+      - image: ratnadeepb/slops-producer-state:latest
         name: producer
         ports:
         - containerPort: 62000
@@ -52,6 +52,10 @@ spec:
         - name: VANILLA
           # value: "true" # original Kafka
           value: "false" # SMALOPS
+        - name: LOAD_IMBALANCE_TOLERANCE
+          value: "10"
+        - name: "REBALANCE_SLEEP_TIME"
+          value: "500"
         - name: TRACER_NAME
           value: "producer"
         - name: TRACER_COLLECTOR

@@ -1,4 +1,4 @@
 #!/bin/bash
 go mod tidy
-docker build -t ratnadeepb/slops-producer:latest .
-docker push ratnadeepb/slops-producer:latest
+docker build -t ratnadeepb/slops-producer-state:latest .
+docker push ratnadeepb/slops-producer-state:latest

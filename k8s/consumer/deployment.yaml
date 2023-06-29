@@ -43,7 +43,7 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: SVC_TIME_MS # how long the requests take to be processed
-              value: "10"
+              value: "20"
             - name: KAFKA_BOOTSTRAP
               value: "ordergo-kafka-bootstrap:9092"
             - name: TRACER_NAME

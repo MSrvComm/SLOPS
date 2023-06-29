@@ -1,29 +1,50 @@
 package internal
 
 import (
+	"log"
 	"math"
+	"os"
+	"strconv"
 	"sync"
+	"time"
 )
 
 // KeyRecord stores the metadata for a flow.
 type KeyRecord struct {
-	Key       string // The key identifying a flow.
-	Count     uint64 // The `size` of the flow.
-	Partition int    // The partition this key is mapped to.
+	Key       string    // The key identifying a flow.
+	Count     uint64    // The `size` of the flow.
+	Partition int       // The partition this key is mapped to.
+	timer     time.Time // The last time the flow identified by this key was migrated.
 }
 
 // PartitionMap stores the flows that have been mapped to each partition.
 type PartitionMap struct {
-	storeMu sync.RWMutex          // Lock the struct before making changes to the store.
-	store   map[int][]*KeyRecord  // A store of flows mapped to partitions.
-	keyMap  map[string]*KeyRecord // Points to the key record of each key.
+	storeMu                sync.RWMutex          // Lock the struct before making changes to the store.
+	sleepTime              time.Duration         // Avoid Rebalance() busy loop.
+	loadImbalanceTolerance int                   // Percentage in load imbalance to be tolerated.
+	migrationInterval      time.Duration         // No flow will be migrated twice during this interval.
+	store                  map[int][]*KeyRecord  // A store of flows mapped to partitions.
+	keyMap                 map[string]*KeyRecord // Points to the key record of each key.
 }
 
 // Return a new Partition Map
-func NewPartitionMap() *PartitionMap {
+func NewPartitionMap(migrationInterval int) *PartitionMap {
+	wt_tol, err := strconv.ParseInt(os.Getenv("LOAD_IMBALANCE_TOLERANCE"), 10, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	sleepTime, err := strconv.ParseInt(os.Getenv("REBALANCE_SLEEP_TIME"), 10, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return &PartitionMap{
-		store:  map[int][]*KeyRecord{},
-		keyMap: map[string]*KeyRecord{},
+		loadImbalanceTolerance: int(wt_tol),
+		sleepTime:              time.Duration(sleepTime),
+		migrationInterval:      time.Duration(migrationInterval),
+		store:                  map[int][]*KeyRecord{},
+		keyMap:                 map[string]*KeyRecord{},
 	}
 }
 
@@ -34,16 +55,16 @@ func (pm *PartitionMap) PopulateMaps(partitions int) {
 	}
 }
 
-// addKey adds a key to the backup store.
+// addKey adds a key to the store.
 // It is only called from the Rebalance function and thus does not use locking.
 // Rebalance already takes the locks.
 func (pm *PartitionMap) addKey(key string, count uint64, partition int) {
-	kc := KeyRecord{Key: key, Count: count, Partition: partition}
+	kc := KeyRecord{Key: key, Count: count, Partition: partition, timer: time.Now()}
 	pm.store[partition] = append(pm.store[partition], &kc)
 	pm.keyMap[key] = &kc
 }
 
-// AddKey adds a key to the backup store.
+// AddKey adds a key to the store.
 func (pm *PartitionMap) AddKey(key string, count uint64, partition int) {
 	pm.storeMu.Lock()
 	defer pm.storeMu.Unlock()
@@ -58,6 +79,7 @@ func (pm *PartitionMap) getKey(key string) *KeyRecord {
 	if ok {
 		return kc
 	}
+
 	return nil
 }
 
@@ -70,7 +92,7 @@ func (pm *PartitionMap) GetKey(key string) *KeyRecord {
 	return pm.getKey(key)
 }
 
-// deleteKey deletes key from partition in the backup store.
+// deleteKey deletes key from partition in the store.
 // Return key metadata or nil if not found.
 func (pm *PartitionMap) deleteKey(key string) *KeyRecord {
 	for _, kcArr := range pm.store {
@@ -82,6 +104,7 @@ func (pm *PartitionMap) deleteKey(key string) *KeyRecord {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -109,12 +132,14 @@ func (pm *PartitionMap) migrateKey(key string, count uint64, dstPartition int) {
 }
 
 func (pm *PartitionMap) systemAvgSize() float64 {
+
 	total := 0.0
 	for _, kcArr := range pm.store {
 		for _, kc := range kcArr {
 			total += float64(kc.Count)
 		}
 	}
+
 	return total / float64(len(pm.store))
 }
 
@@ -135,6 +160,7 @@ func (pm *PartitionMap) partitionSize(partition int) float64 {
 			}
 		}
 	}
+
 	return total
 }
 
@@ -146,22 +172,49 @@ func (pm *PartitionMap) PartitionSize(partition int) float64 {
 	return pm.partitionSize(partition)
 }
 
-// Rebalance rebalances the backup store.
+// Check if the load on the partitions differ by more than the tolerance level.
+func (pm *PartitionMap) checkTolerance() bool {
+	pm.storeMu.RLock()
+	partitionSizes := make([]float64, len(pm.store))
+	for p := range pm.store {
+		partitionSizes = append(partitionSizes, pm.partitionSize(p))
+	}
+	pm.storeMu.RUnlock()
+
+	maxLoad, minLoad := 0.0, math.Inf(1)
+	for _, load := range partitionSizes {
+		if load > maxLoad {
+			maxLoad = load
+		} else if load < minLoad {
+			minLoad = load
+		}
+	}
+
+	return (maxLoad-minLoad)/minLoad >= (float64(pm.loadImbalanceTolerance)/100)*minLoad
+}
+
+// Rebalance the store.
 func (pm *PartitionMap) Rebalance() {
-	// Divide partitions into greater than and lesser than sets.
-	lessThanParts, grtrThanParts := pm.partitionSets()
-	// For each partition in grtrThanParts
-	for _, p := range *grtrThanParts {
-		// Select the set to be migrated
-		candidates := pm.migrationCandidates(p)
-		if candidates == nil || len(*candidates) == 0 {
+	for {
+		time.Sleep(pm.sleepTime * time.Microsecond)
+		if !pm.checkTolerance() {
 			continue
 		}
-		// Find target partitions for each candidate flow.
-		swapMap := pm.targetMatch(candidates, lessThanParts)
-		for p, kcArr := range *swapMap {
-			for _, kc := range kcArr {
-				pm.migrateKey(kc.Key, kc.Count, p)
+		// Divide partitions into greater-than and lesser-than sets.
+		lessThanParts, grtrThanParts := pm.partitionSets()
+		// For each partition in grtrThanParts
+		for _, p := range *grtrThanParts {
+			// Select the set to be migrated
+			candidates := pm.migrationCandidates(p)
+			if candidates == nil || len(*candidates) == 0 {
+				continue
+			}
+			// Find target partitions for each candidate flow.
+			swapMap := pm.targetMatch(candidates, lessThanParts)
+			for p, kcArr := range *swapMap {
+				for _, kc := range kcArr {
+					pm.migrateKey(kc.Key, kc.Count, p)
+				}
 			}
 		}
 	}
@@ -176,13 +229,14 @@ func (pm *PartitionMap) partitionSets() (*[]int, *[]int) {
 	lessThanParts := make([]int, 0)
 	grtrThanParts := make([]int, 0)
 	for p := 0; p < len(pm.store); p++ {
-		pSize := pm.PartitionSize(p)
+		pSize := pm.partitionSize(p)
 		if pSize < sysAvg {
 			lessThanParts = append(lessThanParts, p)
 		} else if pSize > sysAvg {
 			grtrThanParts = append(grtrThanParts, p)
 		}
 	}
+
 	return &lessThanParts, &grtrThanParts
 }
 
@@ -191,7 +245,7 @@ func (pm *PartitionMap) migrationCandidates(partition int) *[]KeyRecord {
 	pm.storeMu.RLock()
 	defer pm.storeMu.RUnlock()
 
-	diff := pm.PartitionSize(partition) - pm.systemAvgSize()
+	diff := pm.partitionSize(partition) - pm.systemAvgSize()
 	if diff <= 0 {
 		return nil
 	}
@@ -199,12 +253,13 @@ func (pm *PartitionMap) migrationCandidates(partition int) *[]KeyRecord {
 	for p, kcArr := range pm.store {
 		if p == partition {
 			for _, kc := range kcArr {
-				if float64(kc.Count) <= diff {
+				if time.Since(kc.timer) > time.Duration(pm.migrationInterval) {
 					candidates = append(candidates, *kc)
 				}
 			}
 		}
 	}
+
 	return &candidates
 }
 
@@ -214,13 +269,13 @@ func (pm *PartitionMap) targetMatch(candidates *[]KeyRecord, lessThanParts *[]in
 	defer pm.storeMu.RUnlock()
 
 	swapMap := make(map[int][]KeyRecord)
-	srcSize := pm.PartitionSize((*candidates)[0].Partition)
+	srcSize := pm.partitionSize((*candidates)[0].Partition)
 	sysAvg := pm.systemAvgSize()
 	for _, kc := range *candidates {
 		dstPartition := kc.Partition
 		dstDiff := math.Inf(1) // Positive infinity.
 		for _, partition := range *lessThanParts {
-			dstSize := pm.PartitionSize(partition)
+			dstSize := pm.partitionSize(partition)
 			// Stopping condition.
 			if srcSize < dstSize || srcSize-dstSize < math.Abs(srcSize-dstSize+2*float64(kc.Count)) {
 				continue
@@ -237,5 +292,6 @@ func (pm *PartitionMap) targetMatch(candidates *[]KeyRecord, lessThanParts *[]in
 		}
 		swapMap[dstPartition] = append(swapMap[dstPartition], kc)
 	}
+
 	return &swapMap
 }
