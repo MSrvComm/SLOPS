@@ -176,7 +176,7 @@ func (pm *PartitionMap) partitionSets() (*[]int, *[]int) {
 	lessThanParts := make([]int, 0)
 	grtrThanParts := make([]int, 0)
 	for p := 0; p < len(pm.store); p++ {
-		pSize := pm.PartitionSize(p)
+		pSize := pm.partitionSize(p)
 		if pSize < sysAvg {
 			lessThanParts = append(lessThanParts, p)
 		} else if pSize > sysAvg {
@@ -191,7 +191,7 @@ func (pm *PartitionMap) migrationCandidates(partition int) *[]KeyRecord {
 	pm.storeMu.RLock()
 	defer pm.storeMu.RUnlock()
 
-	diff := pm.PartitionSize(partition) - pm.systemAvgSize()
+	diff := pm.partitionSize(partition) - pm.systemAvgSize()
 	if diff <= 0 {
 		return nil
 	}
@@ -214,13 +214,13 @@ func (pm *PartitionMap) targetMatch(candidates *[]KeyRecord, lessThanParts *[]in
 	defer pm.storeMu.RUnlock()
 
 	swapMap := make(map[int][]KeyRecord)
-	srcSize := pm.PartitionSize((*candidates)[0].Partition)
+	srcSize := pm.partitionSize((*candidates)[0].Partition)
 	sysAvg := pm.systemAvgSize()
 	for _, kc := range *candidates {
 		dstPartition := kc.Partition
 		dstDiff := math.Inf(1) // Positive infinity.
 		for _, partition := range *lessThanParts {
-			dstSize := pm.PartitionSize(partition)
+			dstSize := pm.partitionSize(partition)
 			// Stopping condition.
 			if srcSize < dstSize || srcSize-dstSize < math.Abs(srcSize-dstSize+2*float64(kc.Count)) {
 				continue
