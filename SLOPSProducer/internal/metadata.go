@@ -44,7 +44,7 @@ func (pm *PartitionMap) PopulateMaps(partitions int) {
 	}
 }
 
-// addKey adds a key to the backup store.
+// addKey adds a key to the store.
 // It is only called from the Rebalance function and thus does not use locking.
 // Rebalance already takes the locks.
 func (pm *PartitionMap) addKey(key string, count uint64, partition int) {
@@ -53,7 +53,7 @@ func (pm *PartitionMap) addKey(key string, count uint64, partition int) {
 	pm.keyMap[key] = &kc
 }
 
-// AddKey adds a key to the backup store.
+// AddKey adds a key to the store.
 func (pm *PartitionMap) AddKey(key string, count uint64, partition int) {
 	pm.storeMu.Lock()
 	defer pm.storeMu.Unlock()
@@ -80,7 +80,7 @@ func (pm *PartitionMap) GetKey(key string) *KeyRecord {
 	return pm.getKey(key)
 }
 
-// deleteKey deletes key from partition in the backup store.
+// deleteKey deletes key from partition in the store.
 // Return key metadata or nil if not found.
 func (pm *PartitionMap) deleteKey(key string) *KeyRecord {
 	for _, kcArr := range pm.store {
@@ -179,6 +179,10 @@ func (pm *PartitionMap) checkTolerance() bool {
 
 // Rebalance rebalances the backup store.
 func (pm *PartitionMap) Rebalance() {
+	// Return if partitions are reasonably balanced.
+	if !pm.checkTolerance() {
+		return
+	}
 	// Divide partitions into greater than and lesser than sets.
 	lessThanParts, grtrThanParts := pm.partitionSets()
 	// For each partition in grtrThanParts
