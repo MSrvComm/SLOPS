@@ -2,6 +2,12 @@
 
 ## Branches
 
+- `main`: basic SMALOPS. Rebalances at discrete intervals to allow the system to settle down after each rebalancing.
+
+- `main-tolerance`: Rebalances at discrete intervals to allow the system to settle down after each rebalancing, but does not rebalance if load imbalance is not beyond a threshold.
+
+- `state-tracking`: Rebalances continuously, almost - there is small sleep time to prevent busy looping. Tracks migration timestamp for each flow and ignores recently migrated flows. Skips rebalancing if load imbalance is within a threshold.
+
 - `unordered`: holds the code for testing with messages where no ordering is required and has a single producer i.e. producers do not talk about which keys are assigned to which partition and consumer process each message as they arrive.
 
 - `msgset`: implements message set based synchronization. Messages belonging to the cold keys are load balanced with the random partitioner, while hot keys are load balanced using a least weight of two random choices algorithm.
