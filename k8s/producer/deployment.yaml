@@ -31,7 +31,7 @@ spec:
         app: producer
     spec:
       containers:
-      - image: ratnadeepb/slops-producer-state-tol:latest
+      - image: ratnadeepb/slops-producer-state:latest
         name: producer
         ports:
         - containerPort: 62000
