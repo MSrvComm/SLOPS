@@ -172,34 +172,9 @@ func (pm *PartitionMap) PartitionSize(partition int) float64 {
 	return pm.partitionSize(partition)
 }
 
-// Check if the load on the partitions differ by more than the tolerance level.
-func (pm *PartitionMap) checkTolerance() bool {
-	pm.storeMu.RLock()
-	partitionSizes := make([]float64, len(pm.store))
-	for p := range pm.store {
-		partitionSizes = append(partitionSizes, pm.partitionSize(p))
-	}
-	pm.storeMu.RUnlock()
-
-	maxLoad, minLoad := 0.0, math.Inf(1)
-	for _, load := range partitionSizes {
-		if load > maxLoad {
-			maxLoad = load
-		} else if load < minLoad {
-			minLoad = load
-		}
-	}
-
-	return (maxLoad-minLoad)/minLoad >= (float64(pm.loadImbalanceTolerance)/100)*minLoad
-}
-
 // Rebalance the store.
 func (pm *PartitionMap) Rebalance() {
 	for {
-		time.Sleep(pm.sleepTime * time.Microsecond)
-		if !pm.checkTolerance() {
-			continue
-		}
 		// Divide partitions into greater-than and lesser-than sets.
 		lessThanParts, grtrThanParts := pm.partitionSets()
 		// For each partition in grtrThanParts
